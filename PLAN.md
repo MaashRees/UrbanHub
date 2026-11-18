@@ -9,7 +9,7 @@
 
 ```text
 NOAA (batch parallèle) ───────────┐
-CityBikes (relevé toutes les 3 min) ├──► Bronze ──► Silver ──► Gold ──► Frontend Voilà
+CityBikes (relevé toutes les 5 min) ├──► Bronze ───► Silver ──► Gold ──► Frontend Voilà
 OpenAQ (collecte régulière) ────────┘     brut       Parquet     KPI       navigateur
                                                       │
                                                DuckDB / Athena
@@ -27,7 +27,7 @@ La console MinIO gère les objets ; DuckDB permet de les interroger ; Glue est u
 
 - **`minio`** : stockage local. Les notebooks utilisent `boto3` et une configuration commune pour pointer vers MinIO ou vers le cloud.
 - **`jupyter`** : édition et exécution manuelle des notebooks.
-- **`worker`** : exécution automatique des notebooks avec Papermill. Prévoyez un lancement ponctuel pour tester chaque collecte et des tâches indépendantes pour que le batch NOAA ne bloque pas CityBikes. Pour la collecte à trois minutes, suivez les heures de passage et évitez que deux exécutions du même flux se chevauchent.
+- **`worker`** : exécution automatique des notebooks avec Papermill. Prévoyez un lancement ponctuel pour tester chaque collecte et des tâches indépendantes pour que le batch NOAA ne bloque pas CityBikes. Pour la collecte à cinq minutes, suivez les heures de passage et évitez que deux exécutions du même flux se chevauchent.
 - **`frontend`** : Voilà sert le notebook de démo dans le navigateur. Il lit uniquement Gold, avec un accès en lecture seule. Si votre enseignant entend par *frontend* une application JavaScript séparée, validez ce point dès le départ : Voilà répond au besoin d’interface web, mais n’est pas un projet React distinct.
 
 ## 2. Organisation du dépôt
@@ -69,6 +69,64 @@ urbanhub/
 | **4 — Docker, intégration et frontend** | Monter Compose, définir les chemins communs, intégrer les transformations dans `04_traitement_kpis.ipynb` et construire le dashboard Voilà. | Une URL locale de démo, un premier KPI issu de Gold et un parcours de démonstration prêt avant l’enregistrement. |
 
 La personne 4 intègre les traitements ; les trois autres restent responsables du nettoyage de leur source et de la définition de leurs KPI. Paris est la première ville candidate pour la démo. Ajoutez Lyon et Lille, ou d’autres villes mieux couvertes, dès que l’intersection des sources est confirmée. Le téléchargement météo vise la France sur cinq ans, indépendamment du nombre de villes affichées lors de la démo.
+
+### Personne 1 — Météo NOAA : batch, qualité et indicateurs
+
+**Fichier principal :** `notebooks/01_noaa_batch.ipynb`. **Paramètres :** fenêtre de dates, mode échantillon ou France, nombre de téléchargements simultanés.
+
+- [ ] **0 h 00–0 h 30 :** récupérer le catalogue NOAA ISD, filtrer les stations françaises et construire les identifiants à partir des codes USAF/WBAN sans perdre les zéros initiaux. Vérifier les dates d’activité et tester un fichier récent pour une station proche de Paris. Noter les dates exactes des cinq années retenues.
+- [ ] **0 h 30–1 h 15 :** lancer les couples station–année avec un pool borné (par exemple 8 téléchargements simultanés). Écrire les CSV dans `bronze/noaa/year=AAAA/<station_id>.csv`. Sauter les objets déjà présents selon le mode de reprise. Distinguer les fichiers absents des erreurs réseau, enregistrer les résultats dans un manifeste et lancer le lot France en arrière-plan après validation de l’échantillon.
+- [ ] **1 h 15–2 h 30 :** lire les colonnes NOAA utiles (`DATE`, `TMP`, `WND`, `VIS`, `SLP`, `AA1` et autres champs de précipitation disponibles). Appliquer les codes manquants et les échelles du format NOAA ; produire température en °C, vent en m/s et degrés, pression en hPa, visibilité en m et précipitation en mm. Conserver la durée d’accumulation et ne sommer que des périodes non chevauchantes. Attribuer les stations proches aux villes avec le référentiel partagé ; conserver les autres pour l’analyse nationale. Écrire Silver par année et dédupliquer sur `(station_id, timestamp_utc)` avec une règle documentée en cas d’observations concurrentes.
+- [ ] **2 h 30–4 h 00 :** fournir une série mensuelle par ville, une comparaison nationale avec nombre de stations couvertes, un nuage météo–visibilité et des jours extrêmes ou anormaux. Exemple : repérer les jours au-dessus du 95e percentile de température maximale **par ville et saison**, sur la période disponible, et afficher le seuil et le nombre de jours de référence.
+
+**À remettre :** un échantillon Silver au plus tard à **2 h 30**, `weather_daily` et une sortie météo horaire par ville pour le croisement, puis le manifeste de téléchargement pour la vidéo 1. **Validation :** montrer des téléchargements simultanés, relire le Parquet, vérifier les conversions sur quelques lignes et annoncer la couverture réelle du lot France.
+
+### Personne 2 — CityBikes : collecte toutes les cinq minutes et KPI mobilité
+
+**Fichier principal :** `notebooks/02_citybikes_stream.ipynb`. **Paramètres :** villes ou réseaux, heure de collecte et mode « un seul relevé » pour Papermill. Le worker gère la répétition.
+
+- [ ] **0 h 00–0 h 30 :** lister les réseaux français depuis `/v2/networks`, relever leurs identifiants et tester un appel par réseau. Démarrer Paris dès que l’écriture dans Bronze fonctionne. Ajouter les autres réseaux vérifiés sans interrompre la collecte initiale.
+- [ ] **0 h 30–1 h 15 :** écrire un JSON brut par réseau et créneau UTC sous `bronze/citybikes/network=<id>/date=AAAA-MM-JJ/<créneau>.json`. Configurer le worker à **3 minutes**, avec délai d’attente réseau, journal des erreurs par réseau et créneaux sans chevauchement. Vérifier deux captures de données consécutives avant de passer à l’analyse.
+- [ ] **1 h 15–2 h 30 :** mapper `id`, `name`, `latitude`, `longitude`, `timestamp`, `free_bikes` et `empty_slots` vers les champs Silver. Garder `network_id`, `city_id`, l’heure de la source et l’heure du relevé. Dédupliquer les relances sur `(network_id, station_id, créneau_utc)` ; conserver les vrais relevés successifs même si le stock n’a pas changé. Signaler les coordonnées ou stocks absents et exclure les stations hors service des taux si ce statut est fourni.
+- [ ] **2 h 30–4 h 00 :** calculer le taux de rupture `relevés valides à zéro vélo / relevés valides`, et le taux de saturation de la même manière pour les places libres. Afficher le dernier stock et le nombre de relevés. Pour la carte, proposer une règle réglable, par exemple « souvent vide ou pleine » à partir de **30 % des relevés et au moins 10 relevés valides**. Comparer des zones avec une grille simple et signaler les cellules peu couvertes. Pour les heures de pointe, afficher les heures les plus tendues **sur la période observée**, sans extrapoler à une journée type.
+
+**À remettre :** une preuve des deux premiers créneaux, `mobility_station_latest` et `mobility_hourly` avec nombre de relevés et de stations. **Validation :** vérifier qu’une relance du même créneau ne double pas les données et qu’une station sans mesure valide n’est pas affichée comme vide. Les variations de stock, si utilisées pour classer les stations, restent un indicateur indirect d’activité.
+
+### Personne 3 — OpenAQ : capteurs, contrôle des unités et analyse croisée
+
+**Fichier principal :** `notebooks/03_openaq_iot.ipynb`. **Paramètres :** villes, polluants, intervalle, borne de rattrapage ; la clé `OPENAQ_API_KEY` vient de l’environnement.
+
+- [ ] **0 h 00–0 h 30 :** vérifier l’accès à OpenAQ v3, découvrir les sites français puis les capteurs autour des villes retenues. Relever les identifiants, le dernier horodatage, les coordonnées et les unités. Faire une matrice **ville × polluant disponible** pour PM2.5, PM10, O₃, CO et NO₂ ; signaler les absences au groupe tôt.
+- [ ] **0 h 30–1 h 30 :** charger un historique court pour les capteurs retenus, puis lancer un relevé régulier à une cadence compatible avec l’API (par exemple 15 min). Prévoir pagination, reprise après erreur `429` et une petite fenêtre de recouvrement pour récupérer les mesures tardives. Garder les réponses brutes horodatées dans `bronze/openaq/`. Avancer le point de reprise après écriture réussie.
+- [ ] **1 h 30–2 h 30 :** produire `sensor_id`, `pollutant`, `timestamp_utc`, `latitude`, `longitude`, `value`, `unit` et `city_id` en Silver. Dédupliquer par `(sensor_id, timestamp_utc)` pour la série et la granularité retenues. Conserver l’unité avec la valeur et séparer les séries d’unités incompatibles. Documenter le traitement des valeurs manquantes et des mesures signalées par la source.
+- [ ] **2 h 30–4 h 00 :** produire `pollution_hourly` et un classement des zones **pour un même polluant et une même unité**. Pour les anomalies, utiliser un seuil documenté par polluant, ville et unité si l’historique est suffisant ; sinon montrer les pics observés avec la couverture. Pour comparer la « dominance » entre polluants, utiliser un ratio à une référence documentée de même unité et durée, si elle existe ; sinon présenter les profils séparément.
+- [ ] **À partir de 3 h 00 :** avec les personnes 1 et 2, aligner les trois sorties horaires sur `(city_id, hour_utc)` et publier `city_hourly`. Compter les heures météo–pollution, météo–vélos et communes aux trois sources. Graphiques prioritaires : vent–pollution et pluie/température–disponibilité ; comparer si possible des heures locales similaires et donner la taille de l’échantillon. Si les dates ne se recouvrent pas assez, publier le diagnostic plutôt qu’interpoler ou fabriquer des données.
+
+**À remettre :** l’échantillon Silver, `pollution_hourly`, `city_hourly` et le diagnostic de couverture pour le frontend. **Validation :** relire des mesures réelles, vérifier unités et doublons, vérifier que les jointures ne multiplient pas les lignes. Si la clé ou la couverture bloque, documenter l’erreur ou les dates réellement disponibles ; le dashboard affiche cet état.
+
+### Personne 4 — Docker, intégration et frontend Voilà
+
+**Fichiers principaux :** `compose.yaml`, `Dockerfile`, `.env.example`, `README.md`, `notebooks/04_traitement_kpis.ipynb` et `notebooks/05_dashboard.ipynb`. Les responsables de source restent propriétaires de leurs notebooks et de leurs formules.
+
+- [ ] **0 h 00–0 h 30 :** démarrer MinIO avec volume persistant et Jupyter, ou tester immédiatement le bucket cloud si obligatoire. Partager l’endpoint utilisable **depuis Docker**, le bucket, les préfixes et un test d’écriture/relecture. Séparer le rôle d’écriture du pipeline du compte frontend, limité à `gold/`.
+- [ ] **0 h 30–1 h 15 :** lancer le worker Papermill avec tâches indépendantes pour que NOAA ne retarde pas CityBikes. Faire écrire les notebooks exécutés dans un répertoire de résultats distinct des sources. Démarrer Voilà dans le navigateur avec les filtres ville et période, puis préparer quatre vues avec des états « en attente de données ».
+- [ ] **1 h 15–2 h 45 :** intégrer les tables Silver dans `04_traitement_kpis.ipynb` et figer les chemins Gold. Connecter d’abord **un KPI réel** de la première source disponible, idéalement la carte CityBikes. Vérifier qu’il est cohérent avec la table Gold et que les filtres fonctionnent. Laisser les propriétaires fournir leurs autres agrégats et les définitions des indicateurs.
+- [ ] **2 h 45–4 h 00 :** brancher météo, pollution et croisement, ajouter unités, fraîcheur, période, nombre d’observations et messages de données insuffisantes. Si le cloud avec catalogue est retenu, vérifier une requête sur une table Silver et une table Gold. Préparer le README : démarrage, configuration, réexécution et provenance des KPI.
+- [ ] **4 h 00–4 h 45 :** tester un redémarrage, l’accès depuis un autre poste ou navigateur et la démo sur la dernière période Gold conservée. Figer une période lisible pour l’enregistrement et vérifier qu’aucun écran ne dépend d’un appel API en direct pour afficher les résultats.
+
+**À remettre :** URL de démonstration, commandes de lancement, dashboard branché sur Gold et checklist d’enregistrement. **Validation :** un membre qui n’a pas monté Compose peut lancer et ouvrir le frontend avec le README ; les filtres modifient les vues et un filtre sans données donne un message clair.
+
+### Passages de relais et validations en binôme
+
+| Échéance | Passage de relais | Critère concret |
+| --- | --- | --- |
+| **0 h 20** | **4 → 1, 2, 3** : configuration et conventions | Même endpoint/bucket, mêmes `city_id`, mêmes dates UTC. Aucun secret dans le dépôt. |
+| **1 h 15** | **2 + 4** vérifient le worker ; **1 + 3** comparent la couverture | Deux relevés CityBikes espacés ; une station météo et un capteur de pollution géographiquement et temporellement compatibles, ou un écart identifié. |
+| **2 h 30** | **1, 2, 3 → 4** : échantillons Silver et contrats Gold | Pour chaque table : chemin, colonnes, types, unité, clé de déduplication, période disponible et nombre de lignes. Un échantillon réel se lit avec la configuration commune. |
+| **3 h 30** | **1 + 3** valident météo–pollution ; **2 + 4** valident le frontend mobilité | Comptage des heures communes, contrôle de l’absence de jointures plusieurs-à-plusieurs ; un KPI affiché correspond à la valeur calculée dans Gold. |
+| **4 h 45** | **Tous** : répétition, puis enregistrement en binômes | **1 + 4** pilotent la vidéo 1 ; **2 + 3** pilotent la vidéo 2 avec l’aide de 4 pour le frontend. Chacun prépare une interprétation et une limite vérifiable de sa partie. |
+
+Pour éviter les conflits sur les `.ipynb`, gardez **un seul éditeur par notebook**. Les autres transmettent une table, une définition de KPI ou un retour de vérification plutôt que d’éditer en parallèle `04_traitement_kpis.ipynb` et `05_dashboard.ipynb`.
 
 ## 4. Frontend de démonstration
 
