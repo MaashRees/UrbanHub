@@ -4,8 +4,8 @@
 | :--- | :--- |
 | **Décision** | 19 novembre 2026 |
 | **Responsable de la mise en oeuvre** | Rémi (Membre 1, flux météo) |
-| **Statut** | <img src="assets/icons/dot-orange.svg" width="18" height="18" alt=""> Gold déjà basculé sur Open-Meteo le 19/11/2026 à 14:26 UTC (voir section 11). `city_hourly` reste à reconstruire. |
-| **Déjà fait** | Vérification des API et simulation de raccord (section 6). Le script de publication n'est pas encore dans le dépôt. |
+| **Statut** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Livré par Rémi (PR #9) : [script](../scripts/openmeteo_batch.py), [notebook](../notebooks/01_openmeteo_batch.ipynb) et Gold basculé le 19/11/2026. Reste : planifier le rafraîchissement, la visibilité avant 2025, la validation par l'enseignant et la reconstruction de `city_hourly`. |
+| **Déjà fait** | Vérification des API et simulation de raccord (section 6), puis mise en oeuvre par Rémi. Le prototype de simulation n'est pas dans le dépôt. |
 
 Ce document sert de cahier des charges pour Rémi et de mémoire de la décision. Il remplace la partie « source » de la Partie 1 de [ENONCE.md](ENONCE.md) ; le reste de l'énoncé est inchangé.
 
@@ -136,6 +136,8 @@ Règles de cohérence :
 ---
 
 ## <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 8. Travail de Rémi
+
+> État après la PR #9 : le script, le notebook, la publication dans Gold et la mise à jour des résultats sont faits. Restent le rafraîchissement planifié, la validation par l'enseignant et la visibilité avant 2025.
 
 - [ ] Faire valider le changement de source par l'enseignant.
 - [ ] `scripts/openmeteo_batch.py` : requêtes parallèles par ville et année, reprise sur fichiers présents, manifeste, reprise sur 429 et 5xx, options `--mode`, `--start-date`, `--end-date`, `--upload`.
