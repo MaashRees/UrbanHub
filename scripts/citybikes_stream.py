@@ -15,7 +15,7 @@ Source de vérité des tables Gold :
 
 Exemples :
     python scripts/citybikes_stream.py --once
-    python scripts/citybikes_stream.py --interval-seconds 180
+    python scripts/citybikes_stream.py --interval-seconds 300
     python scripts/citybikes_stream.py --storage local --once
 """
 

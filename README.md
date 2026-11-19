@@ -74,7 +74,7 @@ UrbanHub/
 │   └── cities.yml                         # Référentiel des villes et métadonnées
 ├── scripts/                               # Collecte et outils
 │   ├── openmeteo_batch.py                 # Batch météo Open-Meteo (Paris, Lyon, Lille)
-│   ├── citybikes_stream.py                # Micro-batch CityBikes (toutes les 3 min)
+│   ├── citybikes_stream.py                # Micro-batch CityBikes (toutes les 5 min)
 │   ├── noaa_batch.py                      # Ancien batch NOAA, conservé comme historique
 │   └── init_datalake.py                   # Création et test des buckets
 ├── src/
@@ -134,7 +134,7 @@ Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrabl
 
 ### 2. Flux Streaming - Mobilité CityBikes
 - **Source :** [CityBikes API](http://api.citybik.es/v2/networks)
-- **Fréquence :** Collecte automatisée toutes les 2 à 3 minutes.
+- **Fréquence :** Collecte automatisée toutes les 5 minutes (300 s, choix de l'équipe ; l'énoncé indique 2 à 3 minutes).
 - **Variables :** `station_id`, `station_name`, `latitude`, `longitude`, `bikes_available`, `free_slots`, `timestamp`.
 - **Enjeux métier :** Pression sur les stations, détection des ruptures de stock / saturations, pics journaliers.
 
@@ -157,7 +157,7 @@ Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrabl
 - **Python 3.11 et `uv` 0.11+** : pour lancer les scripts hors Docker. `uv sync` installe l'environnement figé dans `uv.lock`, avec les mêmes versions que l'image Docker (pandas 3.1.1, pyarrow 26.0.1).
 - **Data Lake :** Cloudflare R2 partagé (recommandé, clés à demander à l'équipe) ou MinIO local (`urbanhub-minio`, ports `9000` et `9001`, identifiants locaux `minioadmin` / `minioadmin123`).
 - **API :**
-  - `CityBikes` : répond `HTTP 429` si on la sollicite trop vite ; garder au moins 3 minutes entre deux cycles.
+  - `CityBikes` : répond `HTTP 429` si on la sollicite trop vite ; l'intervalle de collecte est de 5 minutes (300 s).
   - `Open-Meteo` : gratuit, usage non commercial, sans clé.
   - `OpenAQ v3` : clé gratuite de 64 caractères hexadécimaux dans `OPENAQ_API_KEY` ; une clé invalide renvoie `HTTP 401`.
 - **Rien n'est planifié automatiquement :** chaque flux se met à jour seulement quand son script ou son notebook est relancé. Voir [AVANCEMENT.md](docs/AVANCEMENT.md).
@@ -194,7 +194,7 @@ docker compose exec jupyter python scripts/init_datalake.py
 uv sync
 ```
 ```powershell
-uv run python scripts/citybikes_stream.py --interval-seconds 180
+uv run python scripts/citybikes_stream.py
 ```
 ```powershell
 uv run jupyter notebook

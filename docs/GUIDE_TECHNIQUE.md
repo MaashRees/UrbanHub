@@ -139,7 +139,7 @@ def fetch_all_noaa_parallel(client, station_list, years, max_workers=8):
 ---
 
 ### 3.3 Ingestion Micro-batch CityBikes (Streaming)
-Collecte toutes les 2 à 3 minutes pour les réseaux configurés dans [config/cities.yml](../config/cities.yml) (ex: `velib-metropole`, `velo-v`, `vlille`).
+Collecte toutes les 5 minutes pour les réseaux configurés dans [config/cities.yml](../config/cities.yml) (ex: `velib-metropole`, `velo-v`, `vlille`).
 
 ```python
 import io
