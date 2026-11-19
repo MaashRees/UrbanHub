@@ -84,6 +84,7 @@ UrbanHub/
 │   ├── 01_noaa_batch.ipynb                # Analyse NOAA 2020-2024 (historique)
 │   ├── 02_citybikes_stream.ipynb          # Pilotage de la collecte CityBikes
 │   ├── 03_openaq_iot.ipynb                # Pollution OpenAQ et table croisée city_hourly
+│   ├── 04_analyses_mobilite.ipynb         # Analyses de mobilité et croisement vélos, météo, pollution
 │   └── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
 ├── demos/                                 # Vidéos finales (non versionnées)
 │   ├── Démo-UrbanHub-Partie1.mp4          # Batch météo, Data Lake et vue météo
@@ -160,7 +161,7 @@ Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrabl
   - `CityBikes` : répond `HTTP 429` si on la sollicite trop vite ; l'intervalle de collecte est de 5 minutes (300 s).
   - `Open-Meteo` : gratuit, usage non commercial, sans clé.
   - `OpenAQ v3` : clé gratuite de 64 caractères hexadécimaux dans `OPENAQ_API_KEY` ; une clé invalide renvoie `HTTP 401`.
-- **Rien n'est planifié automatiquement :** chaque flux se met à jour seulement quand son script ou son notebook est relancé. Voir [AVANCEMENT.md](docs/AVANCEMENT.md).
+- **Collecte en continu :** les trois flux ont un service Docker dans le profil `collect` (`docker compose --profile collect up -d`). Une seule machine doit les faire tourner, car CityBikes limite les appels par adresse. Voir [DEPLOIEMENT_CONTINU.md](docs/DEPLOIEMENT_CONTINU.md).
 
 ---
 
@@ -210,6 +211,8 @@ uv run jupyter notebook
 - <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> [Guide Technique & Recettes d'Architecture (GUIDE_TECHNIQUE.md)](docs/GUIDE_TECHNIQUE.md)
 - <img src="docs/assets/icons/cloud.svg" width="18" height="18" alt=""> [Guide Data Lake Cloud & Bascule R2 (DATALAKE_CLOUD_GUIDE.md)](docs/DATALAKE_CLOUD_GUIDE.md)
 - <img src="docs/assets/icons/thermometer.svg" width="18" height="18" alt=""> [Migration météo NOAA vers Open-Meteo (MIGRATION_OPENMETEO.md)](docs/MIGRATION_OPENMETEO.md)
+- <img src="docs/assets/icons/rocket.svg" width="18" height="18" alt=""> [Faire tourner la collecte en continu (DEPLOIEMENT_CONTINU.md)](docs/DEPLOIEMENT_CONTINU.md)
+- <img src="docs/assets/icons/list.svg" width="18" height="18" alt=""> [Messages à envoyer à l'équipe (MESSAGES_EQUIPE.md)](docs/MESSAGES_EQUIPE.md)
 
 ---
 
