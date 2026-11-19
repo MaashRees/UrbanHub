@@ -1,10 +1,10 @@
-# ☁️ Guide de Déploiement & Bascule Data Lake Cloud
+# <img src="assets/icons/cloud.svg" width="18" height="18" alt=""> Guide de Déploiement & Bascule Data Lake Cloud
 
 > **Objectif :** Ce guide explique pas-à-pas comment créer un Data Lake S3 en ligne **gratuit** (Cloudflare R2 ou Backblaze B2) et comment basculer l'ensemble de la plateforme UrbanHub dessus en modifiant uniquement le fichier `.env`, sans changer une seule ligne de code Python.
 
 ---
 
-## 📑 Sommaire
+## <img src="assets/icons/list.svg" width="18" height="18" alt=""> Sommaire
 
 1. [Le Principe : Architecture 100% Agnostique S3](#1-le-principe--architecture-100-agnostique-s3)
 2. [Option 1 (Recommandée) : Cloudflare R2 (10 Go gratuits, 0 € de bande passante)](#2-option-1-recommandée--cloudflare-r2-10-go-gratuits-0--de-bande-passante)
@@ -36,7 +36,7 @@ Dans UrbanHub, tous les scripts Python et notebooks utilisent le protocole unive
   └───────────────────┘           └───────────────────┘
 ```
 
-👉 **Conséquence :** Pour passer du local au cloud, **aucun code n'est modifié**. On change simplement les identifiants de connexion dans `.env`.
+<img src="assets/icons/arrow-right.svg" width="18" height="18" alt=""> **Conséquence :** Pour passer du local au cloud, **aucun code n'est modifié**. On change simplement les identifiants de connexion dans `.env`.
 
 ---
 
@@ -94,7 +94,7 @@ Si l'école ou le professeur exige impérativement AWS S3 :
 3. Dans **IAM** ➔ Créez un utilisateur programmatique `urbanhub-user` avec la politique `AmazonS3FullAccess`.
 4. Récupérez la clé d'accès et la clé secrète.
 5. L'endpoint sera : `s3.<region>.amazonaws.com` (ex: `s3.eu-west-3.amazonaws.com`).
-> ⚠️ **Alerte quota AWS :** L'offre gratuite AWS ne comprend que **2 000 requêtes PUT/mois**. Si votre script CityBikes fait un relevé toutes les 2 minutes, vous atteindrez 720 écritures par jour et dépasserez le quota gratuit en moins de 3 jours. Préférez Cloudflare R2 si le cloud n'est pas imposé comme étant AWS.
+> <img src="assets/icons/alert.svg" width="18" height="18" alt=""> **Alerte quota AWS :** L'offre gratuite AWS ne comprend que **2 000 requêtes PUT/mois**. Si votre script CityBikes fait un relevé toutes les 2 minutes, vous atteindrez 720 écritures par jour et dépasserez le quota gratuit en moins de 3 jours. Préférez Cloudflare R2 si le cloud n'est pas imposé comme étant AWS.
 
 ---
 
@@ -158,11 +158,11 @@ client = Minio(
 # Test upload dans Bronze
 bucket = os.getenv('MINIO_BUCKET_BRONZE', 'bronze')
 client.put_object(bucket, 'test_cloud.txt', io.BytesIO(b'Connexion Cloud OK!'), 19)
-print(f'✅ Succès : fichier écrit dans {bucket} sur le Cloud !')
+print(f'[OK] Succès : fichier écrit dans {bucket} sur le Cloud !')
 
 # Lecture
 resp = client.get_object(bucket, 'test_cloud.txt')
-print('📥 Contenu relu :', resp.read().decode('utf-8'))
+print('Contenu relu :', resp.read().decode('utf-8'))
 resp.close()
 "
 ```
