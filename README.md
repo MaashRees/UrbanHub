@@ -87,10 +87,23 @@ UrbanHub/
 ## 🌐 Sources de Données & Périmètre
 
 ### 1. Flux Batch — Météo NOAA Global Hourly
-- **Source :** [NOAA Global Hourly Data](https://www.ncei.noaa.gov/data/global-hourly/access/)
-- **Périmètre :** Stations françaises sur les 5 dernières années.
+- **Source :** [Archive NOAA ISD Global Hourly (NODD)](https://registry.opendata.aws/noaa-global-hourly/).
+- **Périmètre :** Stations françaises (`CTRY=FR`) sur les cinq dernières années civiles complètes de l’archive ISD : 2020–2024. L’archive s’arrête le 24 août 2025 ; pour un croisement avec les collectes actuelles, utiliser [GHCNh](https://www.ncei.noaa.gov/products/global-historical-climatology-network-hourly).
 - **Variables :** `station_id`, `timestamp`, `temperature`, `wind_speed`, `wind_direction`, `pressure`, `precipitation`, `visibility`.
 - **Enjeux métier :** Détection d'anomalies climatiques, corrélations météo-visibilité, saisonnalité.
+
+Depuis la racine, avec les dépendances du projet installées :
+
+```bash
+# Échantillon 2025 : Paris-Orly, Lyon–Saint-Exupéry et Lille–Lesquin
+python scripts/noaa_batch.py --workers 3
+# Lot France : cinq années civiles complètes, 2020–2024
+python scripts/noaa_batch.py --mode france --workers 8
+```
+
+Le script reprend les CSV déjà téléchargés et distingue les fichiers absents (HTTP 404) des erreurs dans `bronze/noaa/manifest.json`. Les sorties sont sous `data/noaa-<mode>-<début>-<fin>/`. Ajouter `--upload` pour publier vers les trois `MINIO_BUCKET_*` du `.env` ; l’échantillon utilise le préfixe `sample/2025-2025/` dans chaque bucket. Le lot France utilise les chemins partagés, dont `kpis/weather_daily.parquet` et `kpis/weather_hourly.parquet` dans Gold. Pour Julie et Seer, `weather_hourly` a une clé unique `(city_id, hour_utc)` en UTC ; météo en °C, m/s, hPa, m et mm de pluie sur 1 h. L’analyse est dans [le notebook NOAA](notebooks/01_noaa_batch.ipynb).
+
+Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrables déjà publiés et vérifiés sur R2, les conclusions météo et la limite des mesures de pluie.
 
 ### 2. Flux Streaming — Mobilité CityBikes
 - **Source :** [CityBikes API](http://api.citybik.es/v2/networks)
@@ -123,7 +136,7 @@ L'infrastructure a été auditée et validée sous **Windows 11** :
   - Runtime recommandé : Python 3.11 (`uv run --python 3.11`).
 - **Connectivité API :**
   - `CityBikes API` : Opérationnelle (HTTP 200).
-  - `NOAA Access` : Opérationnel (HTTP 200).
+  - `NOAA ISD` : CSV historiques disponibles via le miroir NODD ; les observations s’arrêtent le 24 août 2025.
   - `OpenAQ API` : Version 3 active ; nécessite l'obtention d'une clé API gratuite configurée dans `OPENAQ_API_KEY`.
 
 ---
