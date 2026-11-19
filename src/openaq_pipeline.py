@@ -230,8 +230,9 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
     selected_sensors = []
     by_city_pollutant = {}
     for entry in catalog:
-        is_recent = entry.get("datetime_last") and "2026" in str(entry["datetime_last"])
-        if not is_recent:
+        # Capteur actif : dernière mesure datée de moins de 30 jours (l'ancien test sur "2026" casserait en 2027).
+        last = pd.to_datetime(entry.get("datetime_last"), utc=True, errors="coerce")
+        if pd.isna(last) or last < pd.Timestamp(now) - pd.Timedelta(days=30):
             continue
         key = (entry["city_id"], entry["pollutant"])
         if key not in by_city_pollutant:
@@ -243,8 +244,14 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
     print(f"Début de l'ingestion Bronze pour {len(selected_sensors)} capteurs sélectionnés...")
     ingested_keys = []
     
-    dt_from = (now - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z")
-    
+    # Premier remplissage : 14 jours. Exécution planifiée : OPENAQ_LOOKBACK_HOURS (ex. 12) limite la
+    # fenêtre relue, donc la taille des objets Bronze ; le dédoublonnage Silver absorbe le recouvrement.
+    lookback_hours = int(os.getenv("OPENAQ_LOOKBACK_HOURS", "0") or 0)
+    if lookback_hours > 0:
+        dt_from = (now - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:00:00Z")
+    else:
+        dt_from = (now - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z")
+
     for s in selected_sensors:
         sid = s["sensor_id"]
         cid = s["city_id"]
@@ -536,24 +543,28 @@ def compute_gold_pollution(minio_client: Minio, df_silver: pd.DataFrame):
 # ==============================================================================
 
 def harmonize_mobility_kpis(minio_client: Minio, gold_bucket: str):
-    """Garantit que les tables mobilité existent sous kpis/ et citybikes/kpis/."""
+    """Recopie les tables mobilité de citybikes/kpis/ (chemin canonique, écrit par le collecteur) vers kpis/.
+
+    La copie est rafraîchie à chaque exécution : auparavant elle n'était créée qu'une fois et
+    restait périmée, ce qui faussait city_hourly après toute reconstruction du Gold mobilité.
+    """
     pairs = [
         ("citybikes/kpis/mobility_hourly.parquet", "kpis/mobility_hourly.parquet"),
         ("citybikes/kpis/mobility_station_latest.parquet", "kpis/mobility_station_latest.parquet")
     ]
     for src, dst in pairs:
         try:
-            minio_client.stat_object(gold_bucket, dst)
+            resp = minio_client.get_object(gold_bucket, src)
+            data = resp.read()
+            resp.close()
+            resp.release_conn()
         except Exception:
-            try:
-                resp = minio_client.get_object(gold_bucket, src)
-                data = resp.read()
-                resp.close()
-                resp.release_conn()
-                minio_client.put_object(gold_bucket, dst, io.BytesIO(data), len(data), content_type="application/x-parquet")
-                print(f"  Harmonisé {src} ➔ {dst}")
-            except Exception:
-                pass
+            continue  # pas de Gold mobilité canonique : on ne touche pas à la copie existante
+        try:
+            minio_client.put_object(gold_bucket, dst, io.BytesIO(data), len(data), content_type="application/x-parquet")
+            print(f"  Copie mise à jour {src} ➔ {dst}")
+        except Exception as error:
+            print(f"  [ATTENTION] Copie impossible {src} ➔ {dst} : {error}")
 
 def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.DataFrame):
     """
@@ -584,7 +595,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
         
     # 2. Vérification Mobilité CityBikes (P2)
     df_m = pd.DataFrame()
-    for m_key in ["kpis/mobility_hourly.parquet", "citybikes/kpis/mobility_hourly.parquet"]:
+    for m_key in ["citybikes/kpis/mobility_hourly.parquet", "kpis/mobility_hourly.parquet"]:
         try:
             resp = minio_client.get_object(gold_bucket, m_key)
             df_m = pd.read_parquet(io.BytesIO(resp.read()))
@@ -610,11 +621,12 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
     p_pivot = p_pivot.rename(columns={col: f"pollution_{col}_ugm3" for col in pollutant_cols})
     
     # Préparation météo
-    w_cols = ["city_id", "hour_utc", "temperature", "wind_speed", "precipitation", "visibility", "pressure"]
+    w_cols = ["city_id", "hour_utc", "temperature", "wind_speed", "wind_direction", "precipitation", "visibility", "pressure"]
     w_sub = df_w[[c for c in w_cols if c in df_w.columns]].copy() if not df_w.empty else pd.DataFrame(columns=["city_id", "hour_utc"])
     w_sub = w_sub.rename(columns={
         "temperature": "weather_temperature_c",
         "wind_speed": "weather_wind_speed_ms",
+        "wind_direction": "weather_wind_direction_deg",
         "precipitation": "weather_precipitation_mm",
         "visibility": "weather_visibility_m",
         "pressure": "weather_pressure_hpa"
