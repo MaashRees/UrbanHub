@@ -69,6 +69,17 @@ API_ROOT = "https://api.citybik.es/v2/networks"
 TARGET_CITIES = ("paris", "lyon", "lille")
 LOG = logging.getLogger("urbanhub.citybikes")
 STOP_REQUESTED = False
+DEFAULT_RATE_LIMIT_PAUSE = 900  # secondes, si l'API ne précise pas Retry-After
+MAX_RATE_LIMIT_PAUSE = 3 * 3600
+PAUSE_UNTIL: datetime | None = None  # fin de la pause imposée par un HTTP 429
+
+
+class RateLimitError(requests.HTTPError):
+    """Quota CityBikes dépassé : l'API demande d'attendre `retry_after` secondes."""
+
+    def __init__(self, message: str, retry_after: int, response: requests.Response | None = None):
+        super().__init__(message, response=response)
+        self.retry_after = retry_after
 
 
 def project_root() -> Path:
@@ -188,8 +199,13 @@ def fetch_network(
     response = session.get(url, timeout=timeout)
     if response.status_code == 429:
         retry_after = response.headers.get("Retry-After", "non communiqué")
-        raise requests.HTTPError(
+        try:
+            wait_seconds = int(float(retry_after))
+        except ValueError:
+            wait_seconds = DEFAULT_RATE_LIMIT_PAUSE
+        raise RateLimitError(
             f"rate limit CityBikes (HTTP 429, Retry-After={retry_after})",
+            wait_seconds,
             response=response,
         )
     response.raise_for_status()
@@ -459,6 +475,12 @@ def collect_once(
     minio_client: Minio | None = None,
     minio_buckets: dict[str, str] | None = None,
 ) -> int:
+    global PAUSE_UNTIL
+    now = datetime.now(timezone.utc)
+    if PAUSE_UNTIL is not None and now < PAUSE_UNTIL:
+        # On respecte le quota : aucun appel tant que la pause demandée par l'API n'est pas écoulée.
+        LOG.warning("Quota CityBikes dépassé : aucun appel avant %s UTC.", PAUSE_UNTIL.strftime("%H:%M:%S"))
+        return 0
     collected = 0
     # Les villes sont interrogées séquentiellement pour limiter la pression API.
     for index, city_id in enumerate(TARGET_CITIES):
@@ -485,11 +507,19 @@ def collect_once(
                 )
             collected += len(frame)
             LOG.info("OK %s : %d stations | Bronze=%s | Silver=%s", city["name"], len(frame), bronze_path, silver_path)
+        except RateLimitError as error:
+            pause = min(max(error.retry_after, 60), MAX_RATE_LIMIT_PAUSE)
+            PAUSE_UNTIL = datetime.now(timezone.utc) + timedelta(seconds=pause)
+            LOG.error("Échec %s : %s. Pause de %d s, les autres réseaux ne sont pas interrogés.", city["name"], error, pause)
+            break
         except (requests.RequestException, ValueError, KeyError, S3Error, OSError) as error:
             LOG.error("Échec %s : %s", city["name"], error)
         if index < len(TARGET_CITIES) - 1:
             time.sleep(request_delay)
 
+    if collected == 0:
+        LOG.warning("Aucune station collectée pendant ce cycle : Gold inchangé.")
+        return 0
     if minio_client is not None and minio_buckets is not None:
         # En ligne : tout vient de R2. Le Silver local de cette machine n'entre jamais dans le Gold publié.
         try:
