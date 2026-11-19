@@ -1,4 +1,4 @@
-# Rémi — Bilan météo NOAA ISD, France 2020–2024
+# Rémi - Bilan météo NOAA ISD, France 2020–2024
 
 ## Couverture et qualité
 

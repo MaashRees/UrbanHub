@@ -1,7 +1,7 @@
-# <img src="assets/icons/bar-chart.svg" width="18" height="18" alt=""> Journal d'Avancement & Feuille de Route — UrbanHub
+# <img src="assets/icons/bar-chart.svg" width="18" height="18" alt=""> Journal d'Avancement & Feuille de Route - UrbanHub
 
 > **Dernière mise à jour :** 19 novembre 2026  
-> **Statut global :** <img src="assets/icons/dot-yellow.svg" width="18" height="18" alt=""> En phase de cadrage et initialisation technique  
+> **Statut global :** <img src="assets/icons/dot-orange.svg" width="18" height="18" alt=""> Les trois flux sont dans le Data Lake et le croisement fonctionne sur une période courte. Restent la collecte vélos en continu, la planification, la sécurité et les vidéos.  
 > **Documents associés :** [Cahier des charges (ENONCE.md)](ENONCE.md) | [Plan d'action (PLAN.md)](PLAN.md) | [Guide Technique & Recettes (GUIDE_TECHNIQUE.md)](GUIDE_TECHNIQUE.md)
 
 Ce document recense l'état d'avancement des différentes composantes de la plateforme **UrbanHub**, les vérifications d'infrastructure réalisées, ainsi que les tâches restantes pour chaque flux.
@@ -16,7 +16,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 | **Data Lake Local (MinIO / Silo)** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Opérationnel | Conteneur `urbanhub-minio` actif sur ports `9000` (API) et `9001` (Console Web). | [docker-compose.yml](../docker-compose.yml) |
 | **Dashboard Voilà Dédié** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Opérationnel | Service autonome `urbanhub-dashboard` actif sur le port `8866`. Endpoint validé HTTP 200 OK. | [http://localhost:8866](http://localhost:8866) |
 | **Environnement Python (uv)** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Opérationnel | Python 3.11 avec `duckdb`, `pyarrow`, `pandas`, `minio`, `boto3`, `folium`, `seaborn`, `ipywidgets`, `scipy`. | [requirements.txt](../requirements.txt) |
-| **API CityBikes (Mobilité)** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Accessible | Réponse HTTP 200 sur `http://api.citybik.es/v2/networks`. Prêt pour l'ingestion temps réel. | [config/cities.yml](../config/cities.yml) |
+| **API CityBikes (Mobilité)** | <img src="assets/icons/dot-orange.svg" width="18" height="18" alt=""> Collecte partielle | Script de collecte toutes les 3 min sur `main` ([citybikes_stream.py](../scripts/citybikes_stream.py)) et [notebook 02](../notebooks/02_citybikes_stream.ipynb). Au 19/11/2026, seulement 2 cycles ont été collectés dans R2. L'API répond `HTTP 429` si on la sollicite trop vite. | [config/cities.yml](../config/cities.yml) |
 | **NOAA Data (Météo)** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Validé | Archive ISD Global Hourly accessible via NODD ; lot France 2020–2024 téléchargé et publié. | [Résultats NOAA](RESULTATS_NOAA.md) |
 | **API OpenAQ (Pollution)** | <img src="assets/icons/dot-orange.svg" width="18" height="18" alt=""> Action requise | **Attention :** L'API v2 est dépréciée (`HTTP 410 Gone`). L'API v3 requiert impérativement une clé d'API (`HTTP 401 Unauthorized` sans header `X-API-Key`). Une clé gratuite doit être générée sur le site officiel OpenAQ et placée dans [.env](../.env.example). | [GUIDE_TECHNIQUE.md (Section 3.4)](GUIDE_TECHNIQUE.md#34-ingestion-capteurs-openaq-v3-iot) |
 | **Structure du projet** | <img src="assets/icons/dot-green.svg" width="18" height="18" alt=""> Structuré | Dossier `docs/` créé avec [ENONCE.md](ENONCE.md), [PLAN.md](PLAN.md), [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md), [DATALAKE_CLOUD_GUIDE.md](DATALAKE_CLOUD_GUIDE.md) et ce fichier [AVANCEMENT.md](AVANCEMENT.md). | Arborescence UrbanHub |
@@ -25,14 +25,14 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 
 ## <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 2. Suivi Détaillé par Flux & Livrables
 
-### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 1 — Flux Batch : Météo Open-Meteo (source officielle)
+### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 1 - Flux Batch : Météo Open-Meteo (source officielle)
 - [x] [Collecte Open-Meteo](../scripts/openmeteo_batch.py) sur Paris, Lyon et Lille depuis 2020 avec le même modèle ECMWF IFS.
 - [x] Bronze JSON et Silver Parquet Open-Meteo publiés. Gold horaire et quotidien publiés aux chemins partagés `kpis/weather_hourly.parquet` et `kpis/weather_daily.parquet` ; archives NOAA conservées sous `kpis/noaa/`.
 - [x] Relecture et vérification du Gold : jointure `(city_id, hour_utc)` en UTC, pluie alignée sur le début de chaque heure et visibilité laissée manquante quand absente de l’API. Au 19/11/2026, 181 050 heures-ville, 6 clés communes avec le Gold mobilité et 923 avec le Gold pollution ; aucune clé commune aux trois à cet instant.
 - [x] [Notebook d’analyse Open-Meteo](../notebooks/01_openmeteo_batch.ipynb) : couverture, saisonnalité, extrêmes et visibilité.
 - [ ] Planifier l’actualisation météo et rejouer le calcul de la table croisée lorsque les collectes mobilité et pollution se recouvrent.
 
-#### Archive NOAA ISD — lot France 2020–2024
+#### Archive NOAA ISD - lot France 2020–2024
 - [x] Récupération et prise de connaissance du cahier des charges
 - [x] Vérification de l’accessibilité des CSV NOAA ISD via le miroir public NODD.
 - [x] Filtrage du catalogue `isd-history.csv` sur `CTRY=FR` et les dates d’activité ; identifiants `USAF + WBAN` conservés comme texte. Le lot inclut 211 stations distinctes.
@@ -43,35 +43,37 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Agrégations **Gold** et questions métier : `weather_hourly.parquet` (129 809 heures-ville) et `weather_daily.parquet` (5 450 jours-ville) publiés et relus sur R2 ; notebook France exécuté et conclusions rédigées sur la saisonnalité, les périodes inhabituelles, les extrêmes et la visibilité. [Résultats, limites et déroulé de démo](RESULTATS_NOAA.md).
 - [ ] Filmer la séquence de démo NOAA avec Seer
 
-### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 2 — Flux Streaming : Mobilité CityBikes (Fréquence 2-3 min)
-- [x] Validation du endpoint `api.citybik.es/v2/networks`
-- [x] Identification des réseaux français cibles dans [config/cities.yml](../config/cities.yml) (`velib-metropole`, `velo-v`, `vlille`)
-- [ ] Script d'interrogation récurrente (scheduler / worker micro-batch)
-- [ ] Stockage brut **Bronze** avec partitionnement Hive : `citybikes/network=<id>/year=YYYY/month=MM/day=DD/snapshot_<HHMMSS>.json`
-- [ ] Structuration en table **Silver** Parquet (`free_bikes`, `empty_slots`, `station_id`, `latitude`, `longitude`)
-- [ ] Calcul des indicateurs **Gold** (taux de rupture, saturation, détection stations critiques)
+### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 2 - Flux Streaming : Mobilité CityBikes (Fréquence 2-3 min)
+- [x] Validation du endpoint `api.citybik.es/v2/networks` et identification des réseaux dans [config/cities.yml](../config/cities.yml) (`velib`, `velov`, `vlille`)
+- [x] [Script de collecte](../scripts/citybikes_stream.py) toutes les 180 s, avec reprise sur erreurs serveur et sans rejeu automatique des `429`
+- [x] [Notebook de pilotage](../notebooks/02_citybikes_stream.ipynb) (PR #10) ; il est livré sans sorties enregistrées
+- [x] **Bronze**, **Silver** et **Gold** publiés dans R2 : 2 248 stations, 6 relevés, `mobility_station_latest` et `mobility_hourly`
+- [ ] Collecte **continue** sur plusieurs jours : au 19/11/2026, 2 cycles seulement (11:09 et 11:39 UTC). Sans elle, ni pics journaliers ni déséquilibres géographiques ne sont démontrables
+- [ ] Gold calculé à partir du Silver **local** de la machine qui collecte : une autre machine qui collecte écrase les tables Gold partagées avec sa propre vue. À corriger en recalculant depuis le Silver de R2
+- [ ] Planifier la collecte (service dans `docker-compose.yml`) au lieu d'une fenêtre laissée ouverte
 
-### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 3 — Flux IoT : Pollution atmosphérique OpenAQ
-- [x] Diagnostic de l'API v2 vs v3
-- [ ] Obtention et configuration de la variable d'environnement `OPENAQ_API_KEY`
-- [ ] Cartographie des capteurs français et polluants disponibles (`PM2.5`, `PM10`, `NO2`, `O3`, `CO`)
-- [ ] Collecte planifiée des mesures et stockage **Bronze** avec partitionnement Hive
-- [ ] Nettoyage, harmonisation des unités (`µg/m³`, `ppm`) vers **Silver** Parquet
-- [ ] Détection des anomalies et profils journaliers **Gold**
+### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 3 - Flux IoT : Pollution atmosphérique OpenAQ
+- [x] Diagnostic de l'API v2 vs v3 ; clé `OPENAQ_API_KEY` valide (une clé de 64 caractères hexadécimaux, la précédente était refusée en `401`)
+- [x] Cartographie : 149 capteurs sur Paris, Lyon et Lille, les 5 polluants (`PM2.5`, `PM10`, `NO2`, `O3`, `CO`) disponibles partout
+- [x] Ingestion **Bronze** partitionnée par ville et par jour. **Correctif du 19/11/2026** : l'ingestion ne lisait que la première page de 300 mesures (les plus anciennes) et perdait les plus récentes ; `fetch_all_measurements` lit désormais toutes les pages
+- [x] **Silver** : unités harmonisées en µg/m³, dédoublonnage sur `(sensor_id, timestamp_utc)` ; 5 719 observations
+- [x] **Gold** `pollution_hourly` (3 732 heures, du 05/11 au 19/11/2026 12:00 UTC), classement des zones, profil journalier, dominance rapportée aux seuils OMS, 292 anomalies au-dessus du 95e percentile
+- [ ] Ingestion régulière : aujourd'hui une exécution du notebook = un instantané, et seuls 2 capteurs par polluant et par ville sont retenus (28 sur 149)
 
-### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 4 — Croisement Analytique Multi-sources
-- [x] Définition de la clé de jointure commune : `(city_id, hour_utc)` (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#36-calcul-des-indicateurs-gold--jointure-multi-sources))
-- [ ] Table Gold transversale : `kpis/city_hourly.parquet`
-- [ ] Analyse croisée météo vs pollution (dispersion par le vent, inversion thermique)
-- [ ] Analyse croisée météo vs mobilité douce (impact pluie / température sur le vélo)
-- [ ] Synthèse des corrélations et seuils de criticité
+### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 4 - Croisement Analytique Multi-sources
+- [x] Clé de jointure commune : `(city_id, hour_utc)` (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#36-calcul-des-indicateurs-gold--jointure-multi-sources))
+- [x] Table Gold transversale `kpis/city_hourly.parquet` reconstruite avec la météo Open-Meteo : 181 050 lignes sans doublon, dont **963 heures pollution et météo** et **6 heures à trois sources**
+- [x] Météo contre pollution (969 heures) : corrélation du vent avec le NO2 de **−0,61** et avec les PM2,5 de **−0,57** ; pluie contre PM10 de −0,16. Période courte (2 semaines de pollution), à présenter comme un premier résultat
+- [ ] Météo contre mobilité douce : seulement 6 heures communes, en attente de la collecte vélos continue
+- [ ] Synthèse des corrélations et seuils de criticité ; retirer la cellule 11 du notebook 03, qui trace des données simulées
 
-### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 5 — Restitution, Sécurité & Démonstrations (Rôle Seer - Membre 4)
-- [x] Création de la stack Docker simple : `Dockerfile` et `docker-compose.yml` (MinIO Silo + Jupyter + Voilà)
-- [x] Script d'initialisation automatique du Data Lake : `scripts/init_datalake.py` (création buckets et versioning)
-- [x] Initialisation du squelette du Dashboard Voilà : `notebooks/05_dashboard.ipynb` (sélecteurs de villes et onglets)
-- [ ] Configuration de l'utilisateur IAM restreint pour le frontend (cf. [policy_gold.json](../../policy_gold.json))
-- [ ] Branchement des premiers KPI réels dans le dashboard dès réception des tables Gold
+### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 5 - Restitution, Sécurité & Démonstrations (Rôle Seer - Membre 4)
+- [x] Stack Docker (`Dockerfile`, `docker-compose.yml` : MinIO Silo, Jupyter, Voilà) et script `scripts/init_datalake.py`
+- [x] Dashboard Voilà [05_dashboard](../notebooks/05_dashboard.ipynb) branché sur les tables Gold réelles : KPI météo, carte OpenStreetMap des stations, pollution avec seuils OMS, onglet jumeau numérique. Textes passés à Open-Meteo, périodes affichées calculées depuis les données
+- [x] Correctif de l'onglet « Jumeau & Croisement » (`TypeError` sur une colonne entière)
+- [x] Icônes SVG à la place des emojis dans les documents, les notebooks et les scripts
+- [ ] Rafraîchissement automatique du dashboard et affichage de la fraîcheur des données
+- [ ] Configuration de l'utilisateur IAM restreint en lecture seule sur Gold (cf. [policy_gold.json](../../policy_gold.json)) ; aujourd'hui Jupyter n'a pas de mot de passe et les conteneurs montent le `.env` avec les clés d'écriture
 - [ ] Génération d'URLs pré-signées pour le partage de synthèses (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#37-partage-sécurisé-par-urls-pré-signées))
 - [ ] Enregistrement vidéo 1 : `demos/Démo-UrbanHub-Partie1.mp4` (avec Rémi)
 - [ ] Enregistrement vidéo 2 : `demos/Démo-UrbanHub-Partie2.mp4` (avec Conambot et Julie)
@@ -81,6 +83,10 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 ## <img src="assets/icons/calendar.svg" width="18" height="18" alt=""> 3. Historique des Actions (Changelog)
 
 - **19/11/2026** :
+  - Bascule météo NOAA vers Open-Meteo : script, notebook 01 et Gold publiés (PR #9) ; cahier des charges et simulation de raccord dans [MIGRATION_OPENMETEO.md](MIGRATION_OPENMETEO.md).
+  - Dashboard : textes Open-Meteo, périodes affichées calculées, correctif de l'onglet croisement, icônes SVG (PR #8).
+  - Correctif de pagination OpenAQ : les mesures vont maintenant jusqu'à l'heure courante ; `city_hourly` reconstruit avec la nouvelle météo (963 heures pollution et météo, 6 heures à trois sources).
+  - Sorties à jour pour les notebooks 01 (Open-Meteo) et 03 (OpenAQ).
   - Restructuration du dossier `UrbanHub/` : création du dossier `docs/` et déplacement de `ENONCE.md` et `PLAN.md`.
   - Création du journal de bord `AVANCEMENT.md`.
   - Rédaction du [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md) capitalisant sur tous les acquis du cours (`notes.md`, `tp_datalake_partitionnement.ipynb`, etc.).

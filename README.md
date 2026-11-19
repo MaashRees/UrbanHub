@@ -36,7 +36,7 @@ Le système s'articule autour de trois couches de stockage et de raffinage de do
 ```text
        SOURCES                          DATA LAKE                            RESTITUTION
  ┌──────────────────┐
- │ NOAA Météo       │──(Batch)────┐
+ │ Open-Meteo Météo │──(Batch)────┐
  └──────────────────┘             │
  ┌──────────────────┐             ▼
  │ CityBikes Vélos  │──(Stream)──►[ BRONZE ]  Données brutes horodatées (CSV / JSON)
@@ -65,19 +65,32 @@ UrbanHub/
 │   ├── ENONCE.md                          # Cahier des charges et consignes détaillées
 │   ├── PLAN.md                            # Feuille de route chronologique et rôles
 │   ├── AVANCEMENT.md                      # Journal de bord et checklist de progression
-│   └── GUIDE_TECHNIQUE.md                 # Recettes, patterns de code et capitalisation des TPs
-├── config/                                # Fichiers de configuration
+│   ├── GUIDE_TECHNIQUE.md                 # Recettes, patterns de code et capitalisation des TPs
+│   ├── DATALAKE_CLOUD_GUIDE.md            # Bascule du Data Lake local vers Cloudflare R2
+│   ├── MIGRATION_OPENMETEO.md             # Passage de la météo NOAA à Open-Meteo
+│   ├── RESULTATS_NOAA.md                  # Bilan historique du lot NOAA 2020-2024
+│   └── assets/icons/                      # Icônes SVG utilisées dans les documents
+├── config/
 │   └── cities.yml                         # Référentiel des villes et métadonnées
-├── notebooks/                             # Notebooks d'ingestion et d'analyse
-│   ├── 01_noaa_batch.ipynb                # Ingestion Batch NOAA France (5 ans)
-│   ├── 02_citybikes_stream.ipynb          # Micro-batch CityBikes (toutes les 2-3 min)
-│   ├── 03_openaq_iot.ipynb                # Ingestion IoT OpenAQ v3 (capteurs)
-│   ├── 04_traitement_kpis.ipynb           # Pipelines de transformation Silver ➔ Gold
+├── scripts/                               # Collecte et outils
+│   ├── openmeteo_batch.py                 # Batch météo Open-Meteo (Paris, Lyon, Lille)
+│   ├── citybikes_stream.py                # Micro-batch CityBikes (toutes les 3 min)
+│   ├── noaa_batch.py                      # Ancien batch NOAA, conservé comme historique
+│   └── init_datalake.py                   # Création et test des buckets
+├── src/
+│   └── openaq_pipeline.py                 # Ingestion et traitement OpenAQ (Bronze, Silver, Gold)
+├── notebooks/
+│   ├── 01_openmeteo_batch.ipynb           # Analyse météo Open-Meteo
+│   ├── 01_noaa_batch.ipynb                # Analyse NOAA 2020-2024 (historique)
+│   ├── 02_citybikes_stream.ipynb          # Pilotage de la collecte CityBikes
+│   ├── 03_openaq_iot.ipynb                # Pollution OpenAQ et table croisée city_hourly
 │   └── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
-├── demos/                                 # Enregistrements vidéo finaux
-│   ├── Démo-UrbanHub-Partie1.mp4          # Batch NOAA, Data Lake et vue météo
+├── demos/                                 # Vidéos finales (non versionnées)
+│   ├── Démo-UrbanHub-Partie1.mp4          # Batch météo, Data Lake et vue météo
 │   └── Démo-UrbanHub-Partie2.mp4          # Streaming, IoT, croisements et Dashboard
-├── requirements.txt                       # Dépendances Python du projet
+├── Dockerfile, docker-compose.yml         # Jupyter, Voilà et MinIO
+├── pyproject.toml, uv.lock                # Environnement Python (uv sync)
+├── requirements.txt                       # Mêmes dépendances, utilisées par le Dockerfile
 ├── .env.example                           # Modèle de configuration d'environnement
 └── README.md                              # Guide principal du projet (ce fichier)
 ```
@@ -86,7 +99,7 @@ UrbanHub/
 
 ## <img src="docs/assets/icons/globe.svg" width="18" height="18" alt=""> Sources de Données & Périmètre
 
-### 1. Flux Batch — Météo Open-Meteo
+### 1. Flux Batch - Météo Open-Meteo
 
 **Source officielle :** [Open-Meteo Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api), modèle ECMWF IFS, données modélisées aux coordonnées de **Paris, Lyon et Lille**. Le lot va du 1er janvier 2020 à la dernière heure UTC terminée à l’exécution ; il ne représente pas un ensemble de stations couvrant toute la France. La visibilité est nulle au sens SQL quand l’API ne la fournit pas (notamment en 2020–2024). La pluie liquide en mm est alignée sur le début de l’intervalle d’accumulation d’une heure.
 
@@ -100,7 +113,7 @@ python scripts/openmeteo_batch.py --upload  # actualisation des tables partagée
 - Gold : `kpis/weather_hourly.parquet` sur `(city_id, hour_utc)` en UTC ; `kpis/weather_daily.parquet` sur `(city_id, day_utc)` en UTC. Le rafraîchissement météo n’est pas planifié automatiquement.
 - Analyse : [notebook Open-Meteo](notebooks/01_openmeteo_batch.ipynb). Sources à créditer : Open-Meteo et ECMWF IFS.
 
-#### Ancien flux — archive NOAA ISD
+#### Ancien flux - archive NOAA ISD
 - **Source :** [Archive NOAA ISD Global Hourly (NODD)](https://registry.opendata.aws/noaa-global-hourly/).
 - **Périmètre :** Stations françaises (`CTRY=FR`) sur les cinq dernières années civiles complètes de l’archive ISD : 2020–2024. L’archive s’arrête le 24 août 2025 ; pour un croisement avec les collectes actuelles, utiliser [GHCNh](https://www.ncei.noaa.gov/products/global-historical-climatology-network-hourly).
 - **Variables :** `station_id`, `timestamp`, `temperature`, `wind_speed`, `wind_direction`, `pressure`, `precipitation`, `visibility`.
@@ -119,7 +132,7 @@ Le script reprend les CSV déjà téléchargés et distingue les fichiers absent
 
 Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrables déjà publiés et vérifiés sur R2, les conclusions météo et la limite des mesures de pluie.
 
-### 2. Flux Streaming — Mobilité CityBikes
+### 2. Flux Streaming - Mobilité CityBikes
 - **Source :** [CityBikes API](http://api.citybik.es/v2/networks)
 - **Fréquence :** Collecte automatisée toutes les 2 à 3 minutes.
 - **Variables :** `station_id`, `station_name`, `latitude`, `longitude`, `bikes_available`, `free_slots`, `timestamp`.
@@ -140,51 +153,49 @@ Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrabl
 
 ## <img src="docs/assets/icons/sliders.svg" width="18" height="18" alt=""> Prérequis & État de l'Environnement
 
-L'infrastructure a été auditée et validée sous **Windows 11** :
-
-- **Stockage S3 / MinIO (Silo) :**
-  - Conteneur Docker `silo3` opérationnel sur le port `9000` (API S3) et `9001` (Console Web).
-  - Identifiants : utilisateur `minioadmin` / mot de passe `minioadmin123`.
-- **Gestionnaire d'environnement Python (`uv`) :**
-  - Gestion par `uv` (version 0.11+).
-  - Runtime recommandé : Python 3.11 (`uv run --python 3.11`).
-- **Connectivité API :**
-  - `CityBikes API` : Opérationnelle (HTTP 200).
-  - `NOAA ISD` : CSV historiques disponibles via le miroir NODD ; les observations s’arrêtent le 24 août 2025.
-  - `OpenAQ API` : Version 3 active ; nécessite l'obtention d'une clé API gratuite configurée dans `OPENAQ_API_KEY`.
+- **Docker Desktop** (Compose v2) : fait tourner Jupyter, Voilà et MinIO.
+- **Python 3.11 et `uv` 0.11+** : pour lancer les scripts hors Docker. `uv sync` installe l'environnement figé dans `uv.lock`, avec les mêmes versions que l'image Docker (pandas 3.1.1, pyarrow 26.0.1).
+- **Data Lake :** Cloudflare R2 partagé (recommandé, clés à demander à l'équipe) ou MinIO local (`urbanhub-minio`, ports `9000` et `9001`, identifiants locaux `minioadmin` / `minioadmin123`).
+- **API :**
+  - `CityBikes` : répond `HTTP 429` si on la sollicite trop vite ; garder au moins 3 minutes entre deux cycles.
+  - `Open-Meteo` : gratuit, usage non commercial, sans clé.
+  - `OpenAQ v3` : clé gratuite de 64 caractères hexadécimaux dans `OPENAQ_API_KEY` ; une clé invalide renvoie `HTTP 401`.
+- **Rien n'est planifié automatiquement :** chaque flux se met à jour seulement quand son script ou son notebook est relancé. Voir [AVANCEMENT.md](docs/AVANCEMENT.md).
 
 ---
 
 ## <img src="docs/assets/icons/rocket.svg" width="18" height="18" alt=""> Guide de Démarrage Rapide
 
-### 1. Naviguer dans le dossier du projet
+### 1. Cloner et entrer dans le dossier
 ```powershell
+git clone https://github.com/Thekorzeremi/UrbanHub.git
 cd UrbanHub
 ```
 
-### 2. Lancer le stockage MinIO local (si non démarré)
-Depuis la racine du dépôt principal :
+### 2. Configurer le fichier `.env`
 ```powershell
-docker-compose up -d
+Copy-Item .env.example .env
 ```
-> La console MinIO est ensuite accessible sur [http://localhost:9001](http://localhost:9001).
+Renseigner les clés R2 (ou le bloc MinIO local, avec `MINIO_ENDPOINT=minio:9000` dans Docker) et `OPENAQ_API_KEY`. Ce fichier n'est jamais versionné.
 
-### 3. Installer les dépendances avec `uv`
+### 3. Démarrer la plateforme
 ```powershell
-uv pip install -r requirements.txt
+docker compose up -d --build
+```
+Dashboard : [http://localhost:8866](http://localhost:8866) | Jupyter : [http://localhost:8888](http://localhost:8888) | Console MinIO : [http://localhost:9001](http://localhost:9001).
+
+### 4. Initialiser et tester le Data Lake
+```powershell
+docker compose exec jupyter python scripts/init_datalake.py
 ```
 
-### 4. Configurer les variables d'environnement
-Créer un fichier `.env` basé sur `.env.example` :
-```ini
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
-MINIO_BUCKET=urbanhub
-OPENAQ_API_KEY=votre_cle_api_openaq
+### 5. Environnement Python local (scripts et notebooks hors Docker)
+```powershell
+uv sync
 ```
-
-### 5. Lancer l'environnement de travail
+```powershell
+uv run python scripts/citybikes_stream.py --interval-seconds 180
+```
 ```powershell
 uv run jupyter notebook
 ```
@@ -198,6 +209,7 @@ uv run jupyter notebook
 - <img src="docs/assets/icons/bar-chart.svg" width="18" height="18" alt=""> [Tableau de bord de l'avancement (AVANCEMENT.md)](docs/AVANCEMENT.md)
 - <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> [Guide Technique & Recettes d'Architecture (GUIDE_TECHNIQUE.md)](docs/GUIDE_TECHNIQUE.md)
 - <img src="docs/assets/icons/cloud.svg" width="18" height="18" alt=""> [Guide Data Lake Cloud & Bascule R2 (DATALAKE_CLOUD_GUIDE.md)](docs/DATALAKE_CLOUD_GUIDE.md)
+- <img src="docs/assets/icons/thermometer.svg" width="18" height="18" alt=""> [Migration météo NOAA vers Open-Meteo (MIGRATION_OPENMETEO.md)](docs/MIGRATION_OPENMETEO.md)
 
 ---
 
@@ -207,5 +219,5 @@ uv run jupyter notebook
 2. **Stockage structuré :** Données partitionnées dans MinIO (Bronze ➔ Silver ➔ Gold).
 3. **Analyses exploratoires & visualisations :** Notebooks avec graphiques et interprétations métier rigoureuses.
 4. **Vidéos de démonstration :**
-   - `demos/Démo-UrbanHub-Partie1.mp4` (Ingestion batch NOAA & Data Lake)
+   - `demos/Démo-UrbanHub-Partie1.mp4` (Batch météo Open-Meteo & Data Lake)
    - `demos/Démo-UrbanHub-Partie2.mp4` (Flux continus CityBikes/OpenAQ, analyses croisées & dashboard)
