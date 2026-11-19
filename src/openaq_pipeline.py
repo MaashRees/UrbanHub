@@ -529,7 +529,7 @@ def harmonize_mobility_kpis(minio_client: Minio, gold_bucket: str):
 def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.DataFrame):
     """
     Exécute la fusion multi-sources réelle sur (city_id, hour_utc) :
-    Pollution OpenAQ (P3) + Météo NOAA (P1) + Mobilité CityBikes (P2).
+    Pollution OpenAQ (P3) + Météo Open-Meteo (P1) + Mobilité CityBikes (P2).
     """
     endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
     gold_bucket = get_bucket_names(endpoint)["gold"]
@@ -537,7 +537,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
     print("\n🔍 Contrôle et fusion multi-sources pour l'analyse croisée :")
     harmonize_mobility_kpis(minio_client, gold_bucket)
     
-    # 1. Vérification Météo NOAA (P1)
+    # 1. Vérification météo (P1) : Open-Meteo au chemin Gold officiel.
     df_w = pd.DataFrame()
     for w_key in ["kpis/weather_hourly.parquet", "sample/2025-2025/kpis/weather_hourly.parquet"]:
         try:
@@ -545,12 +545,13 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
             df_w = pd.read_parquet(io.BytesIO(resp.read()))
             resp.close()
             resp.release_conn()
-            print(f"  - Source 1 Météo NOAA (Personne 1) : 🟢 Disponible ({w_key}, {len(df_w)} lignes)")
+            weather_source = df_w["source"].iloc[0] if not df_w.empty and "source" in df_w else "NOAA ISD"
+            print(f"  - Source 1 Météo ({weather_source}) : 🟢 Disponible ({w_key}, {len(df_w)} lignes)")
             break
         except Exception:
             continue
     if df_w.empty:
-        print("  - Source 1 Météo NOAA (Personne 1) : 🔴 ABSENTE")
+        print("  - Source 1 Météo (Personne 1) : 🔴 ABSENTE")
         
     # 2. Vérification Mobilité CityBikes (P2)
     df_m = pd.DataFrame()
