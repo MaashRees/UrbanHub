@@ -49,6 +49,8 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] [Notebook de pilotage](../notebooks/02_citybikes_stream.ipynb) (PR #10) ; il est livré sans sorties enregistrées
 - [x] **Bronze**, **Silver** et **Gold** publiés dans R2 : 2 248 stations, 6 relevés, `mobility_station_latest` et `mobility_hourly`
 - [ ] Collecte **continue** sur plusieurs jours : au 19/11/2026, 2 cycles seulement (11:09 et 11:39 UTC). Sans elle, ni pics journaliers ni déséquilibres géographiques ne sont démontrables
+- [x] [Script](../scripts/citybikes_archive.py) et [notebook 06](../notebooks/06_archives_citybikes.ipynb) pour télécharger les **archives officielles CityBikes** (data.citybik.es, ODbL, un Parquet par réseau et par mois) sur 5 ans, 2022 à 2026 : plan, reprise, vérification de taille et de lecture Parquet, publication optionnelle dans Bronze. Plan réel : **61 fichiers, 946 Mo**, car l'archive commence en novembre 2024 (2022 et 2023 absents, mois manquants signalés). Testé sur un serveur factice ; **aucun fichier téléchargé à ce jour**
+- [ ] Télécharger les archives, lire leur schéma, les transformer en séries horaires (même forme que le Silver en direct) puis relancer le notebook 04 sur cet historique
 - [x] Gold calculé depuis le Silver **publié** quand on est en ligne (R2/MinIO), et tout en local avec `--storage local` : le Silver local d'une machine n'entre plus jamais dans le Gold partagé. Seules les deux dernières heures sont relues puis fusionnées avec le Gold publié
 - [x] Gold publié reconstruit le 19/11/2026 avec `--rebuild-gold` : 3 lignes horaires et 2 247 stations, compteurs identiques à ceux du Silver publié (l'ancien Gold, qui avait 6 lignes dont 3 heures sans Silver en ligne, est sauvegardé en local)
 - [ ] Relancer le notebook 03 pour que `kpis/mobility_*` (copie harmonisée) et `city_hourly` suivent le nouveau Gold mobilité
@@ -64,6 +66,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] **Gold** `pollution_hourly` (3 732 heures, du 05/11 au 19/11/2026 12:00 UTC), classement des zones, profil journalier, dominance rapportée aux seuils OMS, 292 anomalies au-dessus du 95e percentile
 - [x] Service `collector-openaq` : pipeline relancé toutes les 2 h avec une fenêtre de 12 h (`OPENAQ_LOOKBACK_HOURS`), filtre des capteurs actifs sur 30 jours au lieu de l'année 2026 écrite en dur
 - [ ] Retenir plus de 2 capteurs par polluant et par ville (28 sur 149) et rendre le Silver incrémental (il relit tout le Bronze à chaque exécution)
+- [ ] Historique pollution : l'archive publique OpenAQ sur S3 (`openaq-data-archive`, un fichier `csv.gz` par jour et par emplacement) couvre 2020 à 2026 pour nos emplacements (200 à 360 fichiers par an), sans quota d'API ; l'API v3 remonte aussi jusqu'en 2022 pour un capteur testé. Script à écrire sur le modèle de `citybikes_archive.py`
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 4 - Croisement Analytique Multi-sources
 - [x] Clé de jointure commune : `(city_id, hour_utc)` (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#36-calcul-des-indicateurs-gold--jointure-multi-sources))
