@@ -12,12 +12,14 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 
 | Composant | Statut | Observations & Diagnostic | Référence / Solution |
 | :--- | :---: | :--- | :--- |
-| **Conteneur MinIO (Silo)** | 🟢 Opérationnel | Conteneur `silo3` actif (`Up 22h`), port API `9000`, console web `9001`. Health check HTTP 200 OK. | [docker-compose.yml](../../docker-compose.yml) |
-| **Environnement Python (uv)** | 🟢 Opérationnel | `uv 0.11.14` configuré. Python 3.11 (`cpython-3.11.15`) fonctionnel et stable. Dépendances de base installées (`pandas`, `pyarrow`, `minio`, `requests`, `matplotlib`). | [requirements.txt](../requirements.txt) |
+| **Data Lake Cloud (Cloudflare R2)** | 🟢 Opérationnel & Validé | Connexion HTTPS validée sur `*.r2.cloudflarestorage.com`. Buckets `urbanhub-bronze`, `urbanhub-silver`, `urbanhub-gold` accessibles. Test d'écriture/lecture réussi. | [DATALAKE_CLOUD_GUIDE.md](DATALAKE_CLOUD_GUIDE.md) |
+| **Data Lake Local (MinIO / Silo)** | 🟢 Opérationnel | Conteneur `urbanhub-minio` actif sur ports `9000` (API) et `9001` (Console Web). | [docker-compose.yml](../docker-compose.yml) |
+| **Dashboard Voilà Dédié** | 🟢 Opérationnel | Service autonome `urbanhub-dashboard` actif sur le port `8866`. Endpoint validé HTTP 200 OK. | [http://localhost:8866](http://localhost:8866) |
+| **Environnement Python (uv)** | 🟢 Opérationnel | Python 3.11 avec `duckdb`, `pyarrow`, `pandas`, `minio`, `boto3`, `folium`, `seaborn`, `ipywidgets`, `scipy`. | [requirements.txt](../requirements.txt) |
 | **API CityBikes (Mobilité)** | 🟢 Accessible | Réponse HTTP 200 sur `http://api.citybik.es/v2/networks`. Prêt pour l'ingestion temps réel. | [config/cities.yml](../config/cities.yml) |
 | **NOAA Data (Météo)** | 🟢 Accessible | Réponse HTTP 200 sur le portail NOAA Global Hourly. Prêt pour le téléchargement parallèle. | [GUIDE_TECHNIQUE.md (Section 3.2)](GUIDE_TECHNIQUE.md#32-téléchargement-parallèle-noaa-batch) |
 | **API OpenAQ (Pollution)** | 🟠 Action requise | **Attention :** L'API v2 est dépréciée (`HTTP 410 Gone`). L'API v3 requiert impérativement une clé d'API (`HTTP 401 Unauthorized` sans header `X-API-Key`). Une clé gratuite doit être générée sur le site officiel OpenAQ et placée dans [.env](../.env.example). | [GUIDE_TECHNIQUE.md (Section 3.4)](GUIDE_TECHNIQUE.md#34-ingestion-capteurs-openaq-v3-iot) |
-| **Structure du projet** | 🟢 Structuré | Dossier `docs/` créé avec [ENONCE.md](ENONCE.md), [PLAN.md](PLAN.md), [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md) et ce fichier [AVANCEMENT.md](AVANCEMENT.md). | Arborescence UrbanHub |
+| **Structure du projet** | 🟢 Structuré | Dossier `docs/` créé avec [ENONCE.md](ENONCE.md), [PLAN.md](PLAN.md), [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md), [DATALAKE_CLOUD_GUIDE.md](DATALAKE_CLOUD_GUIDE.md) et ce fichier [AVANCEMENT.md](AVANCEMENT.md). | Arborescence UrbanHub |
 
 ---
 
