@@ -25,7 +25,14 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 
 ## 📋 2. Suivi Détaillé par Flux & Livrables
 
-### 🔹 Partie 1 — Flux Batch : Météo NOAA (Stations France sur 5 ans)
+### 🔹 Partie 1 — Flux Batch : Météo Open-Meteo (source officielle)
+- [x] [Collecte Open-Meteo](../scripts/openmeteo_batch.py) sur Paris, Lyon et Lille depuis 2020 avec le même modèle ECMWF IFS.
+- [x] Bronze JSON et Silver Parquet Open-Meteo publiés. Gold horaire et quotidien publiés aux chemins partagés `kpis/weather_hourly.parquet` et `kpis/weather_daily.parquet` ; archives NOAA conservées sous `kpis/noaa/`.
+- [x] Relecture et vérification du Gold : jointure `(city_id, hour_utc)` en UTC, pluie alignée sur le début de chaque heure et visibilité laissée manquante quand absente de l’API. Au 19/11/2026, 181 050 heures-ville, 6 clés communes avec le Gold mobilité et 923 avec le Gold pollution ; aucune clé commune aux trois à cet instant.
+- [x] [Notebook d’analyse Open-Meteo](../notebooks/01_openmeteo_batch.ipynb) : couverture, saisonnalité, extrêmes et visibilité.
+- [ ] Planifier l’actualisation météo et rejouer le calcul de la table croisée lorsque les collectes mobilité et pollution se recouvrent.
+
+#### Archive NOAA ISD — lot France 2020–2024
 - [x] Récupération et prise de connaissance du cahier des charges
 - [x] Vérification de l’accessibilité des CSV NOAA ISD via le miroir public NODD.
 - [x] Filtrage du catalogue `isd-history.csv` sur `CTRY=FR` et les dates d’activité ; identifiants `USAF + WBAN` conservés comme texte. Le lot inclut 211 stations distinctes.

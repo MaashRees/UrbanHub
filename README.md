@@ -86,7 +86,21 @@ UrbanHub/
 
 ## 🌐 Sources de Données & Périmètre
 
-### 1. Flux Batch — Météo NOAA Global Hourly
+### 1. Flux Batch — Météo Open-Meteo
+
+**Source officielle :** [Open-Meteo Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api), modèle ECMWF IFS, données modélisées aux coordonnées de **Paris, Lyon et Lille**. Le lot va du 1er janvier 2020 à la dernière heure UTC terminée à l’exécution ; il ne représente pas un ensemble de stations couvrant toute la France. La visibilité est nulle au sens SQL quand l’API ne la fournit pas (notamment en 2020–2024). La pluie liquide en mm est alignée sur le début de l’intervalle d’accumulation d’une heure.
+
+```bash
+python scripts/openmeteo_batch.py           # lot local
+python scripts/openmeteo_batch.py --upload  # actualisation des tables partagées R2
+```
+
+- Bronze : `openmeteo/year=AAAA/city_id=VILLE/archive.json` et `openmeteo/manifest.json`.
+- Silver : `weather/openmeteo/year=AAAA/weather_hourly.parquet`.
+- Gold : `kpis/weather_hourly.parquet` sur `(city_id, hour_utc)` en UTC ; `kpis/weather_daily.parquet` sur `(city_id, day_utc)` en UTC. Le rafraîchissement météo n’est pas planifié automatiquement.
+- Analyse : [notebook Open-Meteo](notebooks/01_openmeteo_batch.ipynb). Sources à créditer : Open-Meteo et ECMWF IFS.
+
+#### Ancien flux — archive NOAA ISD
 - **Source :** [Archive NOAA ISD Global Hourly (NODD)](https://registry.opendata.aws/noaa-global-hourly/).
 - **Périmètre :** Stations françaises (`CTRY=FR`) sur les cinq dernières années civiles complètes de l’archive ISD : 2020–2024. L’archive s’arrête le 24 août 2025 ; pour un croisement avec les collectes actuelles, utiliser [GHCNh](https://www.ncei.noaa.gov/products/global-historical-climatology-network-hourly).
 - **Variables :** `station_id`, `timestamp`, `temperature`, `wind_speed`, `wind_direction`, `pressure`, `precipitation`, `visibility`.
@@ -101,7 +115,7 @@ python scripts/noaa_batch.py --workers 3
 python scripts/noaa_batch.py --mode france --workers 8
 ```
 
-Le script reprend les CSV déjà téléchargés et distingue les fichiers absents (HTTP 404) des erreurs dans `bronze/noaa/manifest.json`. Les sorties sont sous `data/noaa-<mode>-<début>-<fin>/`. Ajouter `--upload` pour publier vers les trois `MINIO_BUCKET_*` du `.env` ; l’échantillon utilise le préfixe `sample/2025-2025/` dans chaque bucket. Le lot France utilise les chemins partagés, dont `kpis/weather_daily.parquet` et `kpis/weather_hourly.parquet` dans Gold. Pour Julie et Seer, `weather_hourly` a une clé unique `(city_id, hour_utc)` en UTC ; météo en °C, m/s, hPa, m et mm de pluie sur 1 h. L’analyse est dans [le notebook NOAA](notebooks/01_noaa_batch.ipynb).
+Le script reprend les CSV déjà téléchargés et distingue les fichiers absents (HTTP 404) des erreurs dans `bronze/noaa/manifest.json`. Les sorties sont sous `data/noaa-<mode>-<début>-<fin>/`. Avec `--upload`, le Gold du lot France est archivé sous `kpis/noaa/` ; l’échantillon utilise le préfixe `sample/2025-2025/`. L’analyse historique est dans [le notebook NOAA](notebooks/01_noaa_batch.ipynb).
 
 Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrables déjà publiés et vérifiés sur R2, les conclusions météo et la limite des mesures de pluie.
 

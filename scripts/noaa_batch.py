@@ -154,7 +154,7 @@ def city_daily(hourly):
     )
 
 
-def publish(output, outputs, sample, years):
+def publish(output, outputs, sample, years, *, source="NOAA-ISD"):
     load_dotenv(ROOT / ".env")
     endpoint = os.environ["MINIO_ENDPOINT"]
     protocol = "https" if os.getenv("MINIO_SECURE", "true").lower() == "true" else "http"
@@ -168,9 +168,11 @@ def publish(output, outputs, sample, years):
     prefix = f"sample/{years[0]}-{years[-1]}/" if sample else ""
     for relative in outputs:
         layer, key = relative.split("/", 1)
+        if source == "NOAA-ISD" and not sample and layer == "gold" and key.startswith("kpis/"):
+            key = key.replace("kpis/", "kpis/noaa/", 1)
         content_type = {".csv": "text/csv", ".json": "application/json", ".parquet": "application/x-parquet"}
         client.upload_file(str(output / relative), buckets[layer], prefix + key,
-                           ExtraArgs={"ContentType": content_type[Path(key).suffix], "Metadata": {"source": "NOAA-ISD"}})
+                           ExtraArgs={"ContentType": content_type[Path(key).suffix], "Metadata": {"source": source}})
         print(f"s3://{buckets[layer]}/{prefix}{key}")
 
 

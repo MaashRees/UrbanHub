@@ -28,8 +28,8 @@ Les cinq fichiers Silver ont été relus sans doublon sur `(station_id, timestam
 | Bronze | `s3://urbanhub-bronze/noaa/year=AAAA/station_id=….csv` (`AAAA` de 2020 à 2024) | 1 029 CSV sources, sans préfixe `sample/`. La colonne `STATION` contient l’identifiant de station. |
 | Manifeste | `s3://urbanhub-bronze/noaa/manifest.json` | Suivi des 1 048 couples station–année et des 404. Dans `path`, le premier composant `bronze/` désigne la couche ; la clé R2 commence à `noaa/`. |
 | Silver | `s3://urbanhub-silver/weather/year=AAAA/weather_france.parquet` (`AAAA` de 2020 à 2024) | Observations nettoyées de la France, clé `(station_id, timestamp_utc)`. |
-| Gold horaire | `s3://urbanhub-gold/kpis/weather_hourly.parquet` | Pour Julie : jointure `(city_id, hour_utc)`, en UTC ; vérifier les heures communes avant d’interpréter une corrélation. |
-| Gold journalier | `s3://urbanhub-gold/kpis/weather_daily.parquet` | Pour Seer : séries météo par `(city_id, day_utc)` en UTC. |
+| Gold horaire archivé | `s3://urbanhub-gold/kpis/noaa/weather_hourly.parquet` | Clé `(city_id, hour_utc)`, en UTC. Les chemins Gold officiels utilisent désormais Open-Meteo. |
+| Gold journalier archivé | `s3://urbanhub-gold/kpis/noaa/weather_daily.parquet` | Séries historiques par `(city_id, day_utc)` en UTC. |
 
 Le manifeste et les sept Parquets ont été relus sur R2 et leurs empreintes SHA‑256 comparées aux fichiers locaux. Les **1 029 CSV bruts (6,04 Go)** ont été publiés sur R2 avec contrôle MD5 ; l’inventaire distant confirme la présence, la taille et l’empreinte des 1 029 objets. Une copie reste dans `data/noaa-france-2020-2024/bronze/noaa/`.
 
