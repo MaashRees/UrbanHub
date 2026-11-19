@@ -96,15 +96,15 @@ class OpenAQClient:
                     return resp.json()
                 elif resp.status_code == 429:
                     wait_time = int(resp.headers.get("x-ratelimit-reset", 2 ** attempt))
-                    print(f"⚠️ [OpenAQ 429] Rate limit atteint. Attente {wait_time}s...")
+                    print(f"[ATTENTION] [OpenAQ 429] Rate limit atteint. Attente {wait_time}s...")
                     time.sleep(max(1, wait_time))
                 elif resp.status_code >= 500:
                     time.sleep(1 + attempt)
                 else:
-                    print(f"❌ [OpenAQ {resp.status_code}] sur {url}: {resp.text[:120]}")
+                    print(f"[ERREUR] [OpenAQ {resp.status_code}] sur {url}: {resp.text[:120]}")
                     return None
             except requests.RequestException as e:
-                print(f"⚠️ [Erreur Réseau] {e} (tentative {attempt+1}/{max_retries})")
+                print(f"[ATTENTION] [Erreur Réseau] {e} (tentative {attempt+1}/{max_retries})")
                 time.sleep(1 + attempt)
         return None
 
@@ -211,7 +211,7 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
             by_city_pollutant[key].append(entry)
             selected_sensors.append(entry)
             
-    print(f"📥 Début de l'ingestion Bronze pour {len(selected_sensors)} capteurs sélectionnés...")
+    print(f"Début de l'ingestion Bronze pour {len(selected_sensors)} capteurs sélectionnés...")
     ingested_keys = []
     
     dt_from = (now - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z")
@@ -254,7 +254,7 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
         ingested_keys.append(s3_path)
         time.sleep(0.05)
         
-    print(f"✅ Total Bronze : {len(ingested_keys)} objets sauvegardés dans {bronze_bucket}.")
+    print(f"[OK] Total Bronze : {len(ingested_keys)} objets sauvegardés dans {bronze_bucket}.")
     return ingested_keys
 
 # ==============================================================================
@@ -284,14 +284,14 @@ def clean_and_transform_to_silver(minio_client: Minio):
     
     objects = list(minio_client.list_objects(bronze_bucket, prefix="openaq/", recursive=True))
     if not objects:
-        print(f"⚠️ Aucun objet trouvé dans {bronze_bucket}/openaq/")
+        print(f"[ATTENTION] Aucun objet trouvé dans {bronze_bucket}/openaq/")
         # Si Silver existe déjà, charger la table existante
         try:
             resp = minio_client.get_object(silver_bucket, "pollution/pollution_france.parquet")
             df = pd.read_parquet(io.BytesIO(resp.read()))
             resp.close()
             resp.release_conn()
-            print(f"ℹ️ Relecture de la table existante {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
+            print(f"[INFO] Relecture de la table existante {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
             return df
         except Exception:
             return None
@@ -359,7 +359,7 @@ def clean_and_transform_to_silver(minio_client: Minio):
             })
             
     if not records:
-        print("⚠️ Aucun enregistrement valide extrait de Bronze.")
+        print("[ATTENTION] Aucun enregistrement valide extrait de Bronze.")
         return None
         
     df = pd.DataFrame(records)
@@ -394,7 +394,7 @@ def clean_and_transform_to_silver(minio_client: Minio):
                 "auteur": "personne_3_julie"
             }
         )
-    print(f"💾 Silver sauvegardé : {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
+    print(f"Silver sauvegardé : {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
     return df
 
 # ==============================================================================
@@ -438,7 +438,7 @@ def compute_gold_pollution(minio_client: Minio, df_silver: pd.DataFrame):
         content_type="application/x-parquet",
         metadata={"source": "silver/pollution", "auteur": "personne_3_julie"}
     )
-    print(f"🏆 Gold sauvegardé : {gold_bucket}/kpis/pollution_hourly.parquet ({len(hourly)} lignes)")
+    print(f"Gold sauvegardé : {gold_bucket}/kpis/pollution_hourly.parquet ({len(hourly)} lignes)")
     
     # 2. Indicateurs métier
     zones_ranking = df.groupby(["city_name", "location_name", "pollutant", "unit"]).agg(
@@ -499,7 +499,7 @@ def compute_gold_pollution(minio_client: Minio, df_silver: pd.DataFrame):
         length=len(summary_bytes),
         content_type="application/json"
     )
-    print(f"🏆 Résumé JSON sauvegardé : {gold_bucket}/kpis/pollution_summary.json")
+    print(f"Résumé JSON sauvegardé : {gold_bucket}/kpis/pollution_summary.json")
     return hourly, zones_ranking, diurnal_profile, df_dominance, anomalies
 
 # ==============================================================================
@@ -522,7 +522,7 @@ def harmonize_mobility_kpis(minio_client: Minio, gold_bucket: str):
                 resp.close()
                 resp.release_conn()
                 minio_client.put_object(gold_bucket, dst, io.BytesIO(data), len(data), content_type="application/x-parquet")
-                print(f"  ✨ Harmonisé {src} ➔ {dst}")
+                print(f"  Harmonisé {src} ➔ {dst}")
             except Exception:
                 pass
 
@@ -534,7 +534,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
     endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
     gold_bucket = get_bucket_names(endpoint)["gold"]
     
-    print("\n🔍 Contrôle et fusion multi-sources pour l'analyse croisée :")
+    print("\nContrôle et fusion multi-sources pour l'analyse croisée :")
     harmonize_mobility_kpis(minio_client, gold_bucket)
     
     # 1. Vérification météo (P1) : Open-Meteo au chemin Gold officiel.
@@ -546,12 +546,12 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
             resp.close()
             resp.release_conn()
             weather_source = df_w["source"].iloc[0] if not df_w.empty and "source" in df_w else "NOAA ISD"
-            print(f"  - Source 1 Météo ({weather_source}) : 🟢 Disponible ({w_key}, {len(df_w)} lignes)")
+            print(f"  - Source 1 Météo ({weather_source}) : Disponible ({w_key}, {len(df_w)} lignes)")
             break
         except Exception:
             continue
     if df_w.empty:
-        print("  - Source 1 Météo (Personne 1) : 🔴 ABSENTE")
+        print("  - Source 1 Météo (Personne 1) : ABSENTE")
         
     # 2. Vérification Mobilité CityBikes (P2)
     df_m = pd.DataFrame()
@@ -561,15 +561,15 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
             df_m = pd.read_parquet(io.BytesIO(resp.read()))
             resp.close()
             resp.release_conn()
-            print(f"  - Source 2 Mobilité CityBikes (Personne 2) : 🟢 Disponible ({m_key}, {len(df_m)} lignes)")
+            print(f"  - Source 2 Mobilité CityBikes (Personne 2) : Disponible ({m_key}, {len(df_m)} lignes)")
             break
         except Exception:
             continue
     if df_m.empty:
-        print("  - Source 2 Mobilité CityBikes (Personne 2) : 🔴 ABSENTE")
+        print("  - Source 2 Mobilité CityBikes (Personne 2) : ABSENTE")
         
     # 3. Source 3 Pollution OpenAQ (P3)
-    print(f"  - Source 3 Pollution OpenAQ (Personne 3) : 🟢 Disponible ({len(df_pollution_hourly)} lignes)")
+    print(f"  - Source 3 Pollution OpenAQ (Personne 3) : Disponible ({len(df_pollution_hourly)} lignes)")
     
     # Pivot de la pollution par polluant
     p_pivot = df_pollution_hourly.pivot_table(
@@ -651,7 +651,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
             "lignes": str(len(city_hourly))
         }
     )
-    print(f"🏆 Table Gold multi-sources sauvegardée : {gold_bucket}/kpis/city_hourly.parquet ({len(city_hourly)} lignes)")
+    print(f"Table Gold multi-sources sauvegardée : {gold_bucket}/kpis/city_hourly.parquet ({len(city_hourly)} lignes)")
     
     # Rapport de diagnostic
     status_report = {
@@ -691,7 +691,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
         length=len(diag_bytes),
         content_type="application/json"
     )
-    print(f"📋 Diagnostic de couverture mis à jour : {gold_bucket}/kpis/diagnostic_couverture_croisee.json")
+    print(f"Diagnostic de couverture mis à jour : {gold_bucket}/kpis/diagnostic_couverture_croisee.json")
     return status_report, city_hourly
 
 # ==============================================================================
@@ -719,9 +719,9 @@ def run_pipeline():
         
         print("\n=== ÉTAPE 5 : Analyse Croisée & Fusion Multi-sources ===")
         diag, city_hourly = check_and_build_cross_analysis(minio_client, hourly)
-        print("\n🎉 Pipeline OpenAQ exécuté avec succès.")
+        print("\nPipeline OpenAQ exécuté avec succès.")
     else:
-        print("❌ Aucune donnée Silver générée.")
+        print("[ERREUR] Aucune donnée Silver générée.")
 
 if __name__ == "__main__":
     run_pipeline()
