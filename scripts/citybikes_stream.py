@@ -1,25 +1,36 @@
 #!/usr/bin/env python3
 """Collecteur micro-batch CityBikes pour Paris, Lyon et Lille.
 
-Le script écrit les zones locales Bronze, Silver et Gold :
+Le script écrit les zones Bronze, Silver et Gold :
 
     data/bronze/citybikes/network=<id>/year=YYYY/month=MM/day=DD/*.json
     data/silver/mobility/year=YYYY/month=MM/mobility_stations_*.parquet
 
+Source de vérité des tables Gold :
+  - --storage local : tout reste local, Gold calculé depuis le Silver local.
+  - --storage minio ou both (en ligne) : Gold calculé depuis le Silver de R2/MinIO, jamais
+    depuis le Silver local. Seules les deux dernières heures sont relues, puis fusionnées avec
+    le Gold déjà publié (sinon une autre machine écraserait les tables partagées avec sa
+    propre vue). La première exécution, sans Gold publié, relit tout le Silver.
+
 Exemples :
     python scripts/citybikes_stream.py --once
     python scripts/citybikes_stream.py --interval-seconds 300
+    python scripts/citybikes_stream.py --storage local --once
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import os
+import re
 import signal
 import time
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +69,17 @@ API_ROOT = "https://api.citybik.es/v2/networks"
 TARGET_CITIES = ("paris", "lyon", "lille")
 LOG = logging.getLogger("urbanhub.citybikes")
 STOP_REQUESTED = False
+DEFAULT_RATE_LIMIT_PAUSE = 900  # secondes, si l'API ne précise pas Retry-After
+MAX_RATE_LIMIT_PAUSE = 3 * 3600
+PAUSE_UNTIL: datetime | None = None  # fin de la pause imposée par un HTTP 429
+
+
+class RateLimitError(requests.HTTPError):
+    """Quota CityBikes dépassé : l'API demande d'attendre `retry_after` secondes."""
+
+    def __init__(self, message: str, retry_after: int, response: requests.Response | None = None):
+        super().__init__(message, response=response)
+        self.retry_after = retry_after
 
 
 def project_root() -> Path:
@@ -177,8 +199,13 @@ def fetch_network(
     response = session.get(url, timeout=timeout)
     if response.status_code == 429:
         retry_after = response.headers.get("Retry-After", "non communiqué")
-        raise requests.HTTPError(
+        try:
+            wait_seconds = int(float(retry_after))
+        except ValueError:
+            wait_seconds = DEFAULT_RATE_LIMIT_PAUSE
+        raise RateLimitError(
             f"rate limit CityBikes (HTTP 429, Retry-After={retry_after})",
+            wait_seconds,
             response=response,
         )
     response.raise_for_status()
@@ -257,11 +284,123 @@ def read_silver(output_root: Path) -> pd.DataFrame:
     return pd.concat((pd.read_parquet(path) for path in paths), ignore_index=True)
 
 
-def build_gold(silver: pd.DataFrame, output_root: Path) -> dict[str, Path]:
-    """Construit les deux tables Gold mobilité à partir de la Silver dédupliquée."""
-    if silver.empty:
-        return {}
+SILVER_TIME_RE = re.compile(r"mobility_stations_(\d{8}T\d{6})\d*Z\.parquet$")
+GOLD_REMOTE_NAMES = {
+    "latest": "citybikes/kpis/mobility_station_latest.parquet",
+    "hourly": "citybikes/kpis/mobility_hourly.parquet",
+}
+GOLD_KEYS = {"latest": ["network_id", "station_id"], "hourly": ["city_id", "hour_utc"]}
+INCREMENTAL_HOURS = 1  # heures complètes précédant l'heure courante, recalculées à chaque cycle
 
+
+def silver_object_time(object_name: str) -> datetime | None:
+    """Date de collecte lue dans le nom d'un objet Silver (UTC), ou None si le nom est inattendu."""
+    match = SILVER_TIME_RE.search(object_name)
+    if not match:
+        return None
+    return datetime.strptime(match.group(1), "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+
+
+def read_silver_remote(client: Minio, bucket: str, since: datetime | None = None) -> pd.DataFrame:
+    """Relit le Silver publié (R2/MinIO), éventuellement seulement depuis `since` (UTC)."""
+    names = []
+    for item in client.list_objects(bucket, prefix="citybikes/", recursive=True):
+        collected_at = silver_object_time(item.object_name)
+        if collected_at is not None and (since is None or collected_at >= since):
+            names.append(item.object_name)
+
+    def read_one(name: str) -> pd.DataFrame:
+        response = client.get_object(bucket, name)
+        try:
+            return pd.read_parquet(io.BytesIO(response.read()))
+        finally:
+            response.close()
+            response.release_conn()
+
+    if not names:
+        return pd.DataFrame()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        frames = list(pool.map(read_one, sorted(names)))
+    return pd.concat(frames, ignore_index=True)
+
+
+def read_gold_remote(client: Minio, bucket: str, kind: str) -> pd.DataFrame | None:
+    """Relit une table Gold mobilité publiée, ou None si elle n'existe pas encore."""
+    try:
+        response = client.get_object(bucket, GOLD_REMOTE_NAMES[kind])
+    except S3Error as error:
+        if error.code in {"NoSuchKey", "NoSuchBucket"}:
+            return None
+        raise
+    try:
+        return pd.read_parquet(io.BytesIO(response.read()))
+    finally:
+        response.close()
+        response.release_conn()
+
+
+def merge_gold(existing: pd.DataFrame | None, recomputed: pd.DataFrame, kind: str) -> pd.DataFrame:
+    """Les lignes recalculées remplacent celles de même clé ; les autres lignes publiées sont conservées."""
+    keys = GOLD_KEYS[kind]
+    if existing is None or existing.empty:
+        return recomputed.reset_index(drop=True)
+    existing = existing.copy()
+    if "hour_utc" in keys:
+        existing["hour_utc"] = pd.to_datetime(existing["hour_utc"], utc=True)
+        recomputed = recomputed.assign(hour_utc=pd.to_datetime(recomputed["hour_utc"], utc=True))
+    replaced = pd.MultiIndex.from_frame(recomputed[keys])
+    kept = existing.loc[~pd.MultiIndex.from_frame(existing[keys]).isin(replaced)]
+    merged = pd.concat([kept, recomputed], ignore_index=True)
+    return merged.sort_values(keys).reset_index(drop=True)
+
+
+def build_gold_remote(
+    client: Minio,
+    buckets: dict[str, str],
+    output_root: Path,
+    now: datetime | None = None,
+    rebuild: bool = False,
+) -> dict[str, Path]:
+    """Gold calculé depuis le Silver publié, copié en local pour les notebooks.
+
+    Par défaut, seules les dernières heures sont relues et fusionnées avec le Gold publié.
+    Avec `rebuild=True`, le Gold est reconstruit uniquement depuis tout le Silver publié, sans
+    reprendre les lignes déjà publiées (utile si le Gold contient des heures sans Silver en ligne).
+    """
+    now = now or datetime.now(timezone.utc)
+    published = {kind: read_gold_remote(client, buckets["gold"], kind) for kind in GOLD_REMOTE_NAMES}
+    bootstrap = rebuild or any(frame is None or frame.empty for frame in published.values())
+    since = None if bootstrap else now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=INCREMENTAL_HOURS)
+    silver = read_silver_remote(client, buckets["silver"], since)
+    if silver.empty:
+        LOG.warning("Aucun Silver publié depuis %s : Gold inchangé.", since)
+        return {}
+    latest, hourly = compute_gold(silver)
+    if since is not None:
+        # Les heures plus anciennes que la fenêtre relue ne doivent pas être modifiées.
+        hourly = hourly.loc[pd.to_datetime(hourly["hour_utc"], utc=True) >= since]
+    if rebuild:
+        tables = {"latest": latest.reset_index(drop=True), "hourly": hourly.reset_index(drop=True)}
+    else:
+        tables = {
+            "latest": merge_gold(published["latest"], latest, "latest"),
+            "hourly": merge_gold(published["hourly"], hourly, "hourly"),
+        }
+    gold_dir = output_root / "gold" / "kpis"
+    gold_dir.mkdir(parents=True, exist_ok=True)
+    paths = {"latest": gold_dir / "mobility_station_latest.parquet", "hourly": gold_dir / "mobility_hourly.parquet"}
+    for kind, frame in tables.items():
+        frame.to_parquet(paths[kind], index=False, engine="pyarrow")
+    LOG.info(
+        "Gold mobilité (depuis le Silver publié, %s) : %d stations, %d lignes horaires",
+        "reconstruction complète" if bootstrap else f"depuis {since:%Y-%m-%d %H:%M} UTC",
+        len(tables["latest"]), len(tables["hourly"]),
+    )
+    return paths
+
+
+def compute_gold(silver: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Calcule les deux tables Gold mobilité (dernier état par station, indicateurs horaires)."""
     silver = silver.copy()
     silver["observed_at_utc"] = pd.to_datetime(silver["observed_at_utc"], utc=True)
     silver["hour_utc"] = silver["observed_at_utc"].dt.floor("h")
@@ -307,6 +446,14 @@ def build_gold(silver: pd.DataFrame, output_root: Path) -> dict[str, Path]:
     hourly["critical_station_count"] = hourly["critical_station_count"].fillna(0).astype("int64")
     hourly["critical_station_rate"] = hourly["critical_station_count"] / hourly["stations_observed"].replace(0, pd.NA)
 
+    return latest, hourly
+
+
+def build_gold(silver: pd.DataFrame, output_root: Path) -> dict[str, Path]:
+    """Mode local : Gold calculé depuis le Silver local, écrit sous data/gold/kpis."""
+    if silver.empty:
+        return {}
+    latest, hourly = compute_gold(silver)
     gold_dir = output_root / "gold" / "kpis"
     gold_dir.mkdir(parents=True, exist_ok=True)
     paths = {
@@ -315,7 +462,7 @@ def build_gold(silver: pd.DataFrame, output_root: Path) -> dict[str, Path]:
     }
     latest.to_parquet(paths["latest"], index=False, engine="pyarrow")
     hourly.to_parquet(paths["hourly"], index=False, engine="pyarrow")
-    LOG.info("Gold mobilité mise à jour : %d stations, %d lignes horaires", len(latest), len(hourly))
+    LOG.info("Gold mobilité (local) : %d stations, %d lignes horaires", len(latest), len(hourly))
     return paths
 
 
@@ -328,6 +475,12 @@ def collect_once(
     minio_client: Minio | None = None,
     minio_buckets: dict[str, str] | None = None,
 ) -> int:
+    global PAUSE_UNTIL
+    now = datetime.now(timezone.utc)
+    if PAUSE_UNTIL is not None and now < PAUSE_UNTIL:
+        # On respecte le quota : aucun appel tant que la pause demandée par l'API n'est pas écoulée.
+        LOG.warning("Quota CityBikes dépassé : aucun appel avant %s UTC.", PAUSE_UNTIL.strftime("%H:%M:%S"))
+        return 0
     collected = 0
     # Les villes sont interrogées séquentiellement pour limiter la pression API.
     for index, city_id in enumerate(TARGET_CITIES):
@@ -354,14 +507,26 @@ def collect_once(
                 )
             collected += len(frame)
             LOG.info("OK %s : %d stations | Bronze=%s | Silver=%s", city["name"], len(frame), bronze_path, silver_path)
+        except RateLimitError as error:
+            pause = min(max(error.retry_after, 60), MAX_RATE_LIMIT_PAUSE)
+            PAUSE_UNTIL = datetime.now(timezone.utc) + timedelta(seconds=pause)
+            LOG.error("Échec %s : %s. Pause de %d s, les autres réseaux ne sont pas interrogés.", city["name"], error, pause)
+            break
         except (requests.RequestException, ValueError, KeyError, S3Error, OSError) as error:
             LOG.error("Échec %s : %s", city["name"], error)
         if index < len(TARGET_CITIES) - 1:
             time.sleep(request_delay)
 
-    silver = read_silver(output_root)
-    gold_paths = build_gold(silver, output_root)
+    if collected == 0:
+        LOG.warning("Aucune station collectée pendant ce cycle : Gold inchangé.")
+        return 0
     if minio_client is not None and minio_buckets is not None:
+        # En ligne : tout vient de R2. Le Silver local de cette machine n'entre jamais dans le Gold publié.
+        try:
+            gold_paths = build_gold_remote(minio_client, minio_buckets, output_root)
+        except (S3Error, OSError, ValueError) as error:
+            LOG.error("Gold non mis à jour (lecture du Silver ou du Gold publié impossible) : %s", error)
+            gold_paths = {}
         for path in gold_paths.values():
             upload_file(
                 minio_client,
@@ -369,6 +534,9 @@ def collect_once(
                 path,
                 minio_object_name(path, output_root, "gold"),
             )
+    else:
+        # Hors ligne : tout reste local.
+        build_gold(read_silver(output_root), output_root)
     return collected
 
 
@@ -382,7 +550,12 @@ def parse_args() -> argparse.Namespace:
         "--storage",
         choices=("local", "minio", "both"),
         default="both",
-        help="stockage local, MinIO ou les deux (défaut: both)",
+        help="local : tout en local ; minio ou both (en ligne) : Silver et Gold relus depuis R2/MinIO (défaut: both)",
+    )
+    parser.add_argument(
+        "--rebuild-gold",
+        action="store_true",
+        help="reconstruit les tables Gold uniquement depuis tout le Silver publié (R2/MinIO), puis quitte sans collecter",
     )
     parser.add_argument("--connect-timeout", type=int, default=5)
     parser.add_argument("--read-timeout", type=int, default=15)
@@ -413,6 +586,14 @@ def main() -> None:
         minio_client, minio_buckets = build_minio_client()
         for bucket in minio_buckets.values():
             ensure_bucket(minio_client, bucket)
+
+    if args.rebuild_gold:
+        if minio_client is None or minio_buckets is None:
+            raise SystemExit("--rebuild-gold demande un stockage en ligne (--storage minio ou both).")
+        paths = build_gold_remote(minio_client, minio_buckets, args.output_root, rebuild=True)
+        for path in paths.values():
+            upload_file(minio_client, minio_buckets["gold"], path, minio_object_name(path, args.output_root, "gold"))
+        return
 
     LOG.info("Démarrage CityBikes : intervalle=%ss, sortie=%s, stockage=%s", args.interval_seconds, args.output_root, args.storage)
     # Boucle de streaming : un cycle complet, puis attente jusqu'au prochain.
