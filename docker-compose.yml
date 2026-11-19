@@ -50,3 +50,46 @@ services:
       - minio
     command: voila notebooks/05_dashboard.ipynb --port=8866 --no-browser --Voila.ip=0.0.0.0
     restart: unless-stopped
+
+  # ==========================================================================
+  # 4. Collecte en continu (profil "collect", non démarré par défaut)
+  #    docker compose --profile collect up -d
+  # Les trois services lisent le .env (clés R2) via env_file : ne pas y fixer
+  # MINIO_ENDPOINT, sinon on écrirait dans le MinIO local. Une seule machine
+  # doit faire tourner ces services : CityBikes limite le nombre d'appels.
+  # ==========================================================================
+
+  # Mobilité CityBikes : un cycle toutes les 5 minutes, Gold recalculé depuis R2
+  collector-citybikes:
+    build: .
+    container_name: urbanhub-collector-citybikes
+    profiles: ["collect"]
+    env_file: .env
+    volumes:
+      - .:/app
+    command: python scripts/citybikes_stream.py --interval-seconds 300
+    restart: unless-stopped
+
+  # Pollution OpenAQ : toutes les 2 h, fenêtre relue de 12 h, puis city_hourly reconstruit
+  collector-openaq:
+    build: .
+    container_name: urbanhub-collector-openaq
+    profiles: ["collect"]
+    env_file: .env
+    environment:
+      - OPENAQ_LOOKBACK_HOURS=12
+    volumes:
+      - .:/app
+    command: sh -c "while true; do python -m src.openaq_pipeline; sleep 7200; done"
+    restart: unless-stopped
+
+  # Météo Open-Meteo : actualisation toutes les heures des tables Gold météo
+  collector-weather:
+    build: .
+    container_name: urbanhub-collector-weather
+    profiles: ["collect"]
+    env_file: .env
+    volumes:
+      - .:/app
+    command: sh -c "while true; do python scripts/openmeteo_batch.py --upload; sleep 3600; done"
+    restart: unless-stopped
