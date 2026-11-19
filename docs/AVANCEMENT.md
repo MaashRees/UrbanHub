@@ -52,7 +52,9 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Gold calculé depuis le Silver **publié** quand on est en ligne (R2/MinIO), et tout en local avec `--storage local` : le Silver local d'une machine n'entre plus jamais dans le Gold partagé. Seules les deux dernières heures sont relues puis fusionnées avec le Gold publié
 - [x] Gold publié reconstruit le 19/11/2026 avec `--rebuild-gold` : 3 lignes horaires et 2 247 stations, compteurs identiques à ceux du Silver publié (l'ancien Gold, qui avait 6 lignes dont 3 heures sans Silver en ligne, est sauvegardé en local)
 - [ ] Relancer le notebook 03 pour que `kpis/mobility_*` (copie harmonisée) et `city_hourly` suivent le nouveau Gold mobilité
-- [ ] Planifier la collecte (service dans `docker-compose.yml`) au lieu d'une fenêtre laissée ouverte
+- [x] Services de collecte en continu prêts dans `docker-compose.yml` (profil `collect`, voir [DEPLOIEMENT_CONTINU.md](DEPLOIEMENT_CONTINU.md)) ; reste à les démarrer sur une machine toujours allumée, **une seule**
+- [x] Reprise du quota CityBikes : au premier `429`, plus aucun appel jusqu'à la fin de l'attente demandée par l'API
+- [x] [Notebook d'analyses 04](../notebooks/04_analyses_mobilite.ipynb) : les 5 questions métier de la Partie 2 et le volet vélos de la Partie 4, avec messages de couverture ; sections en attente de plusieurs jours de collecte
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 3 - Flux IoT : Pollution atmosphérique OpenAQ
 - [x] Diagnostic de l'API v2 vs v3 ; clé `OPENAQ_API_KEY` valide (une clé de 64 caractères hexadécimaux, la précédente était refusée en `401`)
@@ -60,21 +62,24 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Ingestion **Bronze** partitionnée par ville et par jour. **Correctif du 19/11/2026** : l'ingestion ne lisait que la première page de 300 mesures (les plus anciennes) et perdait les plus récentes ; `fetch_all_measurements` lit désormais toutes les pages
 - [x] **Silver** : unités harmonisées en µg/m³, dédoublonnage sur `(sensor_id, timestamp_utc)` ; 5 719 observations
 - [x] **Gold** `pollution_hourly` (3 732 heures, du 05/11 au 19/11/2026 12:00 UTC), classement des zones, profil journalier, dominance rapportée aux seuils OMS, 292 anomalies au-dessus du 95e percentile
-- [ ] Ingestion régulière : aujourd'hui une exécution du notebook = un instantané, et seuls 2 capteurs par polluant et par ville sont retenus (28 sur 149)
+- [x] Service `collector-openaq` : pipeline relancé toutes les 2 h avec une fenêtre de 12 h (`OPENAQ_LOOKBACK_HOURS`), filtre des capteurs actifs sur 30 jours au lieu de l'année 2026 écrite en dur
+- [ ] Retenir plus de 2 capteurs par polluant et par ville (28 sur 149) et rendre le Silver incrémental (il relit tout le Bronze à chaque exécution)
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 4 - Croisement Analytique Multi-sources
 - [x] Clé de jointure commune : `(city_id, hour_utc)` (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#36-calcul-des-indicateurs-gold--jointure-multi-sources))
 - [x] Table Gold transversale `kpis/city_hourly.parquet` reconstruite avec la météo Open-Meteo : 181 050 lignes sans doublon, dont **963 heures pollution et météo** et **6 heures à trois sources**
 - [x] Météo contre pollution (969 heures) : corrélation du vent avec le NO2 de **−0,61** et avec les PM2,5 de **−0,57** ; pluie contre PM10 de −0,16. Période courte (2 semaines de pollution), à présenter comme un premier résultat
 - [ ] Météo contre mobilité douce : seulement 6 heures communes, en attente de la collecte vélos continue
-- [ ] Synthèse des corrélations et seuils de criticité ; retirer la cellule 11 du notebook 03, qui trace des données simulées
+- [x] Cellule simulée du notebook 03 remplacée par une analyse réelle : vent contre NO2 rho -0,65 (970 heures), vent contre PM2,5 rho -0,67 (742 heures), PM10 médiane 11,3 µg/m³ avec pluie contre 19,1 sans (p < 1e-8), ozone corrélé positivement au vent et à la température
+- [ ] Synthèse finale des corrélations et seuils de criticité, quand la collecte vélos couvrira plusieurs jours
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 5 - Restitution, Sécurité & Démonstrations (Rôle Seer - Membre 4)
 - [x] Stack Docker (`Dockerfile`, `docker-compose.yml` : MinIO Silo, Jupyter, Voilà) et script `scripts/init_datalake.py`
 - [x] Dashboard Voilà [05_dashboard](../notebooks/05_dashboard.ipynb) branché sur les tables Gold réelles : KPI météo, carte OpenStreetMap des stations, pollution avec seuils OMS, onglet jumeau numérique. Textes passés à Open-Meteo, périodes affichées calculées depuis les données
 - [x] Correctif de l'onglet « Jumeau & Croisement » (`TypeError` sur une colonne entière)
 - [x] Icônes SVG à la place des emojis dans les documents, les notebooks et les scripts
-- [ ] Rafraîchissement automatique du dashboard et affichage de la fraîcheur des données
+- [x] Dashboard : tableau de fraîcheur par source (à jour ou en retard), rafraîchissement automatique de la page toutes les 5 minutes avec la ville conservée, adresse du lac masquée
+- [x] Changement de source météo validé avec l'enseignant
 - [ ] Configuration de l'utilisateur IAM restreint en lecture seule sur Gold (cf. [policy_gold.json](../../policy_gold.json)) ; aujourd'hui Jupyter n'a pas de mot de passe et les conteneurs montent le `.env` avec les clés d'écriture
 - [ ] Génération d'URLs pré-signées pour le partage de synthèses (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#37-partage-sécurisé-par-urls-pré-signées))
 - [ ] Enregistrement vidéo 1 : `demos/Démo-UrbanHub-Partie1.mp4` (avec Rémi)
@@ -88,7 +93,8 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
   - Bascule météo NOAA vers Open-Meteo : script, notebook 01 et Gold publiés (PR #9) ; cahier des charges et simulation de raccord dans [MIGRATION_OPENMETEO.md](MIGRATION_OPENMETEO.md).
   - Dashboard : textes Open-Meteo, périodes affichées calculées, correctif de l'onglet croisement, icônes SVG (PR #8).
   - Correctif de pagination OpenAQ : les mesures vont maintenant jusqu'à l'heure courante ; `city_hourly` reconstruit avec la nouvelle météo (963 heures pollution et météo, 6 heures à trois sources).
-  - Sorties à jour pour les notebooks 01 (Open-Meteo) et 03 (OpenAQ).
+  - Sorties à jour pour les notebooks 01 (Open-Meteo), 03 (OpenAQ) et 04 (mobilité).
+  - Lancement en continu : services Docker de collecte, respect du quota CityBikes, documents [DEPLOIEMENT_CONTINU.md](DEPLOIEMENT_CONTINU.md) et [MESSAGES_EQUIPE.md](MESSAGES_EQUIPE.md).
   - Restructuration du dossier `UrbanHub/` : création du dossier `docs/` et déplacement de `ENONCE.md` et `PLAN.md`.
   - Création du journal de bord `AVANCEMENT.md`.
   - Rédaction du [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md) capitalisant sur tous les acquis du cours (`notes.md`, `tp_datalake_partitionnement.ipynb`, etc.).

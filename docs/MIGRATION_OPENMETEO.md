@@ -20,7 +20,7 @@ Ce document sert de cahier des charges pour Rémi et de mémoire de la décision
 | La précipitation NOAA est inutilisable | Dans `kpis/weather_hourly.parquet`, **0 heure de pluie sur 129 809** (max 0,0 mm). Les questions « météo et vélos » et « météo et pollution par la pluie » ne peuvent pas être traitées. |
 | Besoin de données **toujours fraîches** | Exigence de l'équipe : le tableau de bord doit refléter la météo de l'heure courante. |
 
-<img src="assets/icons/alert.svg" width="18" height="18" alt=""> **Écart avec l'énoncé.** La Partie 1 nomme NOAA et demande de télécharger en parallèle des fichiers de stations françaises. À faire valider par l'enseignant avant la remise. Arguments : archive arrêtée, croisement impossible avec NOAA, précipitation absente. Garder le lot NOAA 2020-2024 déjà publié comme preuve de réalisation (voir section 7).
+<img src="assets/icons/check-circle.svg" width="18" height="18" alt=""> **Écart avec l'énoncé validé avec l'enseignant.** La Partie 1 nomme NOAA ; le changement vers Open-Meteo a été accepté. Arguments retenus : archive arrêtée, croisement impossible avec NOAA, précipitation absente. Le lot NOAA 2020-2024 reste conservé comme preuve de réalisation du batch parallèle (voir section 7).
 
 ---
 
@@ -137,9 +137,9 @@ Règles de cohérence :
 
 ## <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> 8. Travail de Rémi
 
-> État après la PR #9 : le script, le notebook, la publication dans Gold et la mise à jour des résultats sont faits. Restent le rafraîchissement planifié, la validation par l'enseignant et la visibilité avant 2025.
+> État après la PR #9 : le script, le notebook, la publication dans Gold et la mise à jour des résultats sont faits. Restent le démarrage du rafraîchissement planifié (service `collector-weather`, voir [DEPLOIEMENT_CONTINU.md](DEPLOIEMENT_CONTINU.md)) et la visibilité avant 2025.
 
-- [ ] Faire valider le changement de source par l'enseignant.
+- [x] Changement de source validé avec l'enseignant.
 - [ ] `scripts/openmeteo_batch.py` : requêtes parallèles par ville et année, reprise sur fichiers présents, manifeste, reprise sur 429 et 5xx, options `--mode`, `--start-date`, `--end-date`, `--upload`.
 - [ ] Respecter le contrat de la section 4, en particulier le décalage d'une heure de la précipitation et l'UTC.
 - [ ] Mode rafraîchissement (section 5) et service dans `docker-compose.yml`.
