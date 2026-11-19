@@ -12,12 +12,14 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 
 | Composant | Statut | Observations & Diagnostic | Référence / Solution |
 | :--- | :---: | :--- | :--- |
-| **Conteneur MinIO (Silo)** | 🟢 Opérationnel | Conteneur `silo3` actif (`Up 22h`), port API `9000`, console web `9001`. Health check HTTP 200 OK. | [docker-compose.yml](../../docker-compose.yml) |
-| **Environnement Python (uv)** | 🟢 Opérationnel | `uv 0.11.14` configuré. Python 3.11 (`cpython-3.11.15`) fonctionnel et stable. Dépendances de base installées (`pandas`, `pyarrow`, `minio`, `requests`, `matplotlib`). | [requirements.txt](../requirements.txt) |
+| **Data Lake Cloud (Cloudflare R2)** | 🟢 Opérationnel & Validé | Connexion HTTPS validée sur `*.r2.cloudflarestorage.com`. Buckets `urbanhub-bronze`, `urbanhub-silver`, `urbanhub-gold` accessibles. Test d'écriture/lecture réussi. | [DATALAKE_CLOUD_GUIDE.md](DATALAKE_CLOUD_GUIDE.md) |
+| **Data Lake Local (MinIO / Silo)** | 🟢 Opérationnel | Conteneur `urbanhub-minio` actif sur ports `9000` (API) et `9001` (Console Web). | [docker-compose.yml](../docker-compose.yml) |
+| **Dashboard Voilà Dédié** | 🟢 Opérationnel | Service autonome `urbanhub-dashboard` actif sur le port `8866`. Endpoint validé HTTP 200 OK. | [http://localhost:8866](http://localhost:8866) |
+| **Environnement Python (uv)** | 🟢 Opérationnel | Python 3.11 avec `duckdb`, `pyarrow`, `pandas`, `minio`, `boto3`, `folium`, `seaborn`, `ipywidgets`, `scipy`. | [requirements.txt](../requirements.txt) |
 | **API CityBikes (Mobilité)** | 🟢 Accessible | Réponse HTTP 200 sur `http://api.citybik.es/v2/networks`. Prêt pour l'ingestion temps réel. | [config/cities.yml](../config/cities.yml) |
 | **NOAA Data (Météo)** | 🟢 Validé | Archive ISD Global Hourly accessible via NODD ; lot France 2020–2024 téléchargé et publié. | [Résultats NOAA](RESULTATS_NOAA.md) |
 | **API OpenAQ (Pollution)** | 🟠 Action requise | **Attention :** L'API v2 est dépréciée (`HTTP 410 Gone`). L'API v3 requiert impérativement une clé d'API (`HTTP 401 Unauthorized` sans header `X-API-Key`). Une clé gratuite doit être générée sur le site officiel OpenAQ et placée dans [.env](../.env.example). | [GUIDE_TECHNIQUE.md (Section 3.4)](GUIDE_TECHNIQUE.md#34-ingestion-capteurs-openaq-v3-iot) |
-| **Structure du projet** | 🟢 Structuré | Dossier `docs/` créé avec [ENONCE.md](ENONCE.md), [PLAN.md](PLAN.md), [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md) et ce fichier [AVANCEMENT.md](AVANCEMENT.md). | Arborescence UrbanHub |
+| **Structure du projet** | 🟢 Structuré | Dossier `docs/` créé avec [ENONCE.md](ENONCE.md), [PLAN.md](PLAN.md), [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md), [DATALAKE_CLOUD_GUIDE.md](DATALAKE_CLOUD_GUIDE.md) et ce fichier [AVANCEMENT.md](AVANCEMENT.md). | Arborescence UrbanHub |
 
 ---
 
@@ -57,13 +59,15 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [ ] Analyse croisée météo vs mobilité douce (impact pluie / température sur le vélo)
 - [ ] Synthèse des corrélations et seuils de criticité
 
-### 🔹 Partie 5 — Restitution, Sécurité & Démonstrations
+### 🔹 Partie 5 — Restitution, Sécurité & Démonstrations (Rôle Seer - Membre 4)
+- [x] Création de la stack Docker simple : `Dockerfile` et `docker-compose.yml` (MinIO Silo + Jupyter + Voilà)
+- [x] Script d'initialisation automatique du Data Lake : `scripts/init_datalake.py` (création buckets et versioning)
+- [x] Initialisation du squelette du Dashboard Voilà : `notebooks/05_dashboard.ipynb` (sélecteurs de villes et onglets)
 - [ ] Configuration de l'utilisateur IAM restreint pour le frontend (cf. [policy_gold.json](../../policy_gold.json))
-- [ ] Configuration de l'interface de visualisation (Voilà / Dashboard)
-- [ ] Vues dédiées : Météo, Mobilité, Pollution, Analyses croisées
+- [ ] Branchement des premiers KPI réels dans le dashboard dès réception des tables Gold
 - [ ] Génération d'URLs pré-signées pour le partage de synthèses (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#37-partage-sécurisé-par-urls-pré-signées))
-- [ ] Enregistrement vidéo 1 : `demos/Démo-UrbanHub-Partie1.mp4` (Batch NOAA & Data Lake)
-- [ ] Enregistrement vidéo 2 : `demos/Démo-UrbanHub-Partie2.mp4` (Flux continus, Dashboard & Croisements)
+- [ ] Enregistrement vidéo 1 : `demos/Démo-UrbanHub-Partie1.mp4` (avec Rémi)
+- [ ] Enregistrement vidéo 2 : `demos/Démo-UrbanHub-Partie2.mp4` (avec Conambot et Julie)
 
 ---
 

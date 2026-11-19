@@ -36,3 +36,8 @@ demos/*.mp4
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Notes locales personnelles & FAQ
+local_notes/
+notes.md
+*.local.md
