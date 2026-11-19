@@ -84,7 +84,7 @@ Règles de cohérence :
 ### Exécution
 - Un service dédié dans `docker-compose.yml` (par exemple `weather-refresh`) qui boucle avec un intervalle, sur le modèle de `scripts/citybikes_stream.py` (`--interval-seconds`). Aujourd'hui rien n'est planifié : chaque flux ne se met à jour que si quelqu'un le relance.
 - **Un seul écrivain** par table Gold : lire, fusionner, republier le fichier entier. Deux écrivains simultanés perdraient des lignes.
-- Même schéma de rafraîchissement à prévoir pour CityBikes (180 s) et OpenAQ (15 min), pour que `city_hourly` se reconstruise sans action manuelle.
+- Même schéma de rafraîchissement à prévoir pour CityBikes (5 min) et OpenAQ (15 min), pour que `city_hourly` se reconstruise sans action manuelle.
 
 ### Affichage
 - Le tableau de bord affiche la **dernière heure disponible** de chaque source (`max(hour_utc)`) et un état « à jour » si l'écart est inférieur à 2 h.
@@ -94,7 +94,7 @@ Règles de cohérence :
 | Source | Fraîcheur visée |
 | :--- | :--- |
 | Météo (forecast `past_days`) | heure courante |
-| CityBikes | 3 minutes |
+| CityBikes | 5 minutes |
 | OpenAQ | 15 minutes |
 | `city_hourly` | après chaque cycle de rafraîchissement |
 
@@ -228,4 +228,4 @@ Relevé en lecture seule avec les clés du `.env`. Il **remplace l'audit de la s
 
 - **Pagination OpenAQ :** l'ingestion ne lisait que la première page de 300 mesures (les plus anciennes) ; corrigé par `fetch_all_measurements` dans `src/openaq_pipeline.py`. La pollution va maintenant jusqu'à 12:00 UTC le jour de l'exécution.
 - **Environnement :** `pyproject.toml` ne déclarait que 4 des 13 paquets utilisés et le projet était déclaré comme un paquet inexistant, ce qui faisait échouer `uv sync` et `uv run`. Corrigé et aligné sur `requirements.txt` (mêmes versions que l'image Docker).
-- **CityBikes, source de vérité :** `collect_once` calculait le Gold depuis le Silver **local** de la machine qui collecte, puis le publiait, ce qui pouvait écraser les tables partagées. Corrigé : en ligne, le Gold est recalculé depuis le Silver publié (deux dernières heures, fusionnées avec le Gold publié) ; hors ligne, tout reste local. Le Gold publié contient encore 3 heures sans Silver en ligne : à reconstruire avec `--rebuild-gold`.
+- **CityBikes, source de vérité :** `collect_once` calculait le Gold depuis le Silver **local** de la machine qui collecte, puis le publiait, ce qui pouvait écraser les tables partagées. Corrigé : en ligne, le Gold est recalculé depuis le Silver publié (deux dernières heures, fusionnées avec le Gold publié) ; hors ligne, tout reste local. Le Gold publié a été reconstruit avec `--rebuild-gold` le 19/11/2026 (3 lignes horaires au lieu de 6, cohérent avec le Silver publié).
