@@ -76,6 +76,8 @@ UrbanHub/
 │   ├── openmeteo_batch.py                 # Batch météo Open-Meteo (Paris, Lyon, Lille)
 │   ├── citybikes_stream.py                # Micro-batch CityBikes (toutes les 5 min)
 │   ├── citybikes_archive.py               # Archives mensuelles CityBikes (data.citybik.es), 5 ans
+│   ├── openaq_archive.py                  # Archive publique OpenAQ (S3), 2022 à 2026, conversion Silver
+│   ├── openmeteo_archive.py               # Météo 2022 à 2026 avec visibilité (ERA5 + historical-forecast)
 │   ├── noaa_batch.py                      # Ancien batch NOAA, conservé comme historique
 │   └── init_datalake.py                   # Création et test des buckets
 ├── src/
