@@ -1,0 +1,38 @@
+# Environnements virtuels Python
+.venv/
+venv/
+env/
+
+# Caches d'exécution Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Checkpoints Jupyter Notebook
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Fichiers de configuration & Secrets (à ne jamais commiter)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Données locales volumineuses & caches Data Lake
+data/
+minio_data/
+*.parquet
+*.csv.gz
+*.tar.gz
+
+# Fichiers vidéos volumineux (> 100 Mo rejetés par GitHub)
+demos/*.mp4
+*.mp4
+
+# Fichiers système & IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
