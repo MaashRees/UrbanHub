@@ -216,10 +216,16 @@ Relevé en lecture seule avec les clés du `.env`. Il **remplace l'audit de la s
 ### <img src="assets/icons/alert.svg" width="18" height="18" alt=""> Écarts à traiter
 | Écart | Détail | Action |
 | :--- | :--- | :--- |
-| **`city_hourly` périmé** | Toujours 130 738 lignes, écrit à 14:03, avant la bascule : 129 823 `meteo_seule`, 909 `pollution_seule`, 6 `mobilite_seule`. Le dashboard n'affiche donc encore aucun croisement. | Relancer `notebooks/03_openaq_iot.ipynb` (étape 5). |
+| `city_hourly` reconstruit | Relancé à 14:59 UTC après la correction de pagination OpenAQ : 181 050 lignes sans doublon, **963 heures pollution et météo**, **6 heures à trois sources**. Corrélation du vent avec le NO2 : -0,61. | Fait. À relancer après chaque nouvelle collecte. |
 | **Visibilité absente avant fin 2025** | 0 valeur en 2020-2024, 7 203 en 2025, complète en 2026 (30 429 sur 181 050). La question « météo et visibilité » ne porte que sur environ un an. Mon test avait trouvé la visibilité dès 2022 avec l'API historical-forecast : le modèle utilisé ici (`ecmwf_ifs`) n'en fournit pas avant. | À vérifier avec Rémi, quitte à interroger l'API sans fixer le modèle. |
 | Colonnes hors contrat | `weather_station_count` absent ; `source`, `weather_model` et `wind_direction` ajoutés. Le code actuel ne lit que des colonnes nommées, donc rien ne casse. | Documenter la décision, ou aligner. |
 | Fenêtre de 6,9 ans | Données depuis le 01/01/2020, au-delà des 5 ans demandés. | Aucune, sauf si l'on veut s'aligner sur 5 ans. |
-| Triple recouvrement | Pollution (jusqu'au 19/11 01:00) et vélos (19/11 10-11 h) ne se recoupent pas entre eux : 0 heure commune aux trois. | Laisser tourner CityBikes et OpenAQ. |
+| Peu d'heures à trois sources | 6 heures seulement : CityBikes n'a que 2 cycles collectés. | Laisser tourner CityBikes plusieurs jours. |
 | Résidus NOAA | `silver/weather/` (78 Mo) et les trois préfixes `sample/` (12 Mo) existent encore ; le code `src/openaq_pipeline.py` lit toujours `sample/2025-2025/...` en repli. | Supprimer après sauvegarde locale, une fois `city_hourly` reconstruit. |
 | Rafraîchissement | La météo est à jour de l'heure courante, mais rien n'indique un service planifié dans le dépôt. | Vérifier avec Rémi comment elle est actualisée (section 5). |
+
+### <img src="assets/icons/info.svg" width="18" height="18" alt=""> Autres constats de la mise à jour du 19/11/2026
+
+- **Pagination OpenAQ :** l'ingestion ne lisait que la première page de 300 mesures (les plus anciennes) ; corrigé par `fetch_all_measurements` dans `src/openaq_pipeline.py`. La pollution va maintenant jusqu'à 12:00 UTC le jour de l'exécution.
+- **Environnement :** `pyproject.toml` ne déclarait que 4 des 13 paquets utilisés et le projet était déclaré comme un paquet inexistant, ce qui faisait échouer `uv sync` et `uv run`. Corrigé et aligné sur `requirements.txt` (mêmes versions que l'image Docker).
+- **Risque CityBikes :** `collect_once` calcule les tables Gold à partir du Silver **local** de la machine qui collecte, puis les publie : une autre machine écraserait les tables Gold partagées. À corriger en recalculant depuis le Silver de R2.
