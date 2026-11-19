@@ -170,6 +170,7 @@ uv run jupyter notebook
 - 🗺️ [Feuille de route & Plan d'architecture (PLAN.md)](docs/PLAN.md)
 - 📊 [Tableau de bord de l'avancement (AVANCEMENT.md)](docs/AVANCEMENT.md)
 - 📘 [Guide Technique & Recettes d'Architecture (GUIDE_TECHNIQUE.md)](docs/GUIDE_TECHNIQUE.md)
+- ☁️ [Guide Data Lake Cloud & Bascule R2 (DATALAKE_CLOUD_GUIDE.md)](docs/DATALAKE_CLOUD_GUIDE.md)
 
 ---
 
