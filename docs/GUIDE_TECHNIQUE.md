@@ -1,4 +1,4 @@
-# 📘 Guide Technique & Recettes d'Architecture — UrbanHub
+# 📘 Guide Technique & Recettes d'Architecture - UrbanHub
 
 > **Objectif :** Ce guide capitalise sur l'ensemble des concepts, codes et retours d'expérience validés dans le cadre des travaux pratiques du cours `Archi_data_lake` ([notes.md](../notes.md), [tp_datalake_partitionnement.ipynb](../tp_datalake_partitionnement.ipynb), [tp_datalake_sinistres.ipynb](../tp_datalake_sinistres.ipynb)).  
 > Il fournit les **recettes prêtes à l'emploi** pour implémenter chaque étape du jumeau numérique urbain **UrbanHub**.
