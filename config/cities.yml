@@ -1,0 +1,28 @@
+# Référentiel des villes cibles pour UrbanHub
+cities:
+  - id: paris
+    name: Paris
+    country: FR
+    latitude: 48.8566
+    longitude: 2.3522
+    citybikes_network_id: velib-metropole
+    noaa_station_filter: "071490"  # Ex: Paris Orly / Le Bourget
+    openaq_city_name: Paris
+
+  - id: lyon
+    name: Lyon
+    country: FR
+    latitude: 45.7640
+    longitude: 4.8357
+    citybikes_network_id: velo-v
+    noaa_station_filter: "074810"  # Ex: Lyon Saint-Exupéry
+    openaq_city_name: Lyon
+
+  - id: lille
+    name: Lille
+    country: FR
+    latitude: 50.6292
+    longitude: 3.0573
+    citybikes_network_id: vlille
+    noaa_station_filter: "070150"  # Ex: Lille Lesquin
+    openaq_city_name: Lille
