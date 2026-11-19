@@ -63,14 +63,14 @@ urbanhub/
 
 | Personne | Responsabilité | Résultat transmis au groupe |
 | --- | --- | --- |
-| **1 — Météo NOAA** | Identifier les stations françaises et lancer en parallèle les téléchargements station–année sur cinq ans. Décoder les champs météo, les unités et les valeurs manquantes. Garder la durée de mesure des précipitations. | Un petit échantillon utilisable rapidement, puis le bilan du téléchargement complet : réussites, absences et erreurs. Fournir la saisonnalité, les extrêmes et un graphique météo–visibilité. |
-| **2 — Mobilité CityBikes** | Lancer la collecte toutes les 3 minutes, conserver les instantanés et calculer les indicateurs de disponibilité. | Deux instantanés horodatés pour valider le démarrage, puis disponibilité par heure et liste des stations vides, pleines ou souvent critiques. |
-| **3 — Pollution OpenAQ et croisement** | Vérifier la clé API et la couverture, collecter les mesures des capteurs et normaliser les unités par polluant. Construire la jointure horaire avec les deux autres responsables de source. | Profils horaires et anomalies par polluant, bilan de couverture et première comparaison croisée sur les périodes communes. |
-| **4 — Docker, intégration et frontend** | Monter Compose, définir les chemins communs, intégrer les transformations dans `04_traitement_kpis.ipynb` et construire le dashboard Voilà. | Une URL locale de démo, un premier KPI issu de Gold et un parcours de démonstration prêt avant l’enregistrement. |
+| **1 - Météo NOAA** | Identifier les stations françaises et lancer en parallèle les téléchargements station–année sur cinq ans. Décoder les champs météo, les unités et les valeurs manquantes. Garder la durée de mesure des précipitations. | Un petit échantillon utilisable rapidement, puis le bilan du téléchargement complet : réussites, absences et erreurs. Fournir la saisonnalité, les extrêmes et un graphique météo–visibilité. |
+| **2 - Mobilité CityBikes** | Lancer la collecte toutes les 3 minutes, conserver les instantanés et calculer les indicateurs de disponibilité. | Deux instantanés horodatés pour valider le démarrage, puis disponibilité par heure et liste des stations vides, pleines ou souvent critiques. |
+| **3 - Pollution OpenAQ et croisement** | Vérifier la clé API et la couverture, collecter les mesures des capteurs et normaliser les unités par polluant. Construire la jointure horaire avec les deux autres responsables de source. | Profils horaires et anomalies par polluant, bilan de couverture et première comparaison croisée sur les périodes communes. |
+| **4 - Docker, intégration et frontend** | Monter Compose, définir les chemins communs, intégrer les transformations dans `04_traitement_kpis.ipynb` et construire le dashboard Voilà. | Une URL locale de démo, un premier KPI issu de Gold et un parcours de démonstration prêt avant l’enregistrement. |
 
 La personne 4 intègre les traitements ; les trois autres restent responsables du nettoyage de leur source et de la définition de leurs KPI. Paris est la première ville candidate pour la démo. Ajoutez Lyon et Lille, ou d’autres villes mieux couvertes, dès que l’intersection des sources est confirmée. Le téléchargement météo vise la France sur cinq ans, indépendamment du nombre de villes affichées lors de la démo.
 
-### Personne 1 — Météo NOAA : batch, qualité et indicateurs
+### Personne 1 - Météo NOAA : batch, qualité et indicateurs
 
 **Fichier principal :** `notebooks/01_noaa_batch.ipynb`. **Paramètres :** fenêtre de dates, mode échantillon ou France, nombre de téléchargements simultanés.
 
@@ -81,7 +81,7 @@ La personne 4 intègre les traitements ; les trois autres restent responsables d
 
 **À remettre :** un échantillon Silver au plus tard à **2 h 30**, `weather_daily` et une sortie météo horaire par ville pour le croisement, puis le manifeste de téléchargement pour la vidéo 1. **Validation :** montrer des téléchargements simultanés, relire le Parquet, vérifier les conversions sur quelques lignes et annoncer la couverture réelle du lot France.
 
-### Personne 2 — CityBikes : collecte toutes les cinq minutes et KPI mobilité
+### Personne 2 - CityBikes : collecte toutes les cinq minutes et KPI mobilité
 
 **Fichier principal :** `notebooks/02_citybikes_stream.ipynb`. **Paramètres :** villes ou réseaux, heure de collecte et mode « un seul relevé » pour Papermill. Le worker gère la répétition.
 
@@ -92,7 +92,7 @@ La personne 4 intègre les traitements ; les trois autres restent responsables d
 
 **À remettre :** une preuve des deux premiers créneaux, `mobility_station_latest` et `mobility_hourly` avec nombre de relevés et de stations. **Validation :** vérifier qu’une relance du même créneau ne double pas les données et qu’une station sans mesure valide n’est pas affichée comme vide. Les variations de stock, si utilisées pour classer les stations, restent un indicateur indirect d’activité.
 
-### Personne 3 — OpenAQ : capteurs, contrôle des unités et analyse croisée
+### Personne 3 - OpenAQ : capteurs, contrôle des unités et analyse croisée
 
 **Fichier principal :** `notebooks/03_openaq_iot.ipynb`. **Paramètres :** villes, polluants, intervalle, borne de rattrapage ; la clé `OPENAQ_API_KEY` vient de l’environnement.
 
@@ -104,7 +104,7 @@ La personne 4 intègre les traitements ; les trois autres restent responsables d
 
 **À remettre :** l’échantillon Silver, `pollution_hourly`, `city_hourly` et le diagnostic de couverture pour le frontend. **Validation :** relire des mesures réelles, vérifier unités et doublons, vérifier que les jointures ne multiplient pas les lignes. Si la clé ou la couverture bloque, documenter l’erreur ou les dates réellement disponibles ; le dashboard affiche cet état.
 
-### Personne 4 — Docker, intégration et frontend Voilà
+### Personne 4 - Docker, intégration et frontend Voilà
 
 **Fichiers principaux :** `compose.yaml`, `Dockerfile`, `.env.example`, `README.md`, `notebooks/04_traitement_kpis.ipynb` et `notebooks/05_dashboard.ipynb`. Les responsables de source restent propriétaires de leurs notebooks et de leurs formules.
 

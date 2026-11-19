@@ -1,6 +1,6 @@
-# 🏙️ UrbanHub — Jumeau Numérique & Plateforme Data Lake Smart City
+# 🏙️ UrbanHub - Jumeau Numérique & Plateforme Data Lake Smart City
 
-> **Projet M2 IPSSI** — Architecture Data Lake & Entrepôts de Données  
+> **Projet M2 IPSSI** - Architecture Data Lake & Entrepôts de Données  
 > Système Big Data pour la collecte, le stockage et l'analyse croisée de données urbaines (Batch, Streaming, IoT).
 
 ---
@@ -125,7 +125,7 @@ Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrabl
 - **Variables :** `station_id`, `station_name`, `latitude`, `longitude`, `bikes_available`, `free_slots`, `timestamp`.
 - **Enjeux métier :** Pression sur les stations, détection des ruptures de stock / saturations, pics journaliers.
 
-### 3. Flux IoT — Pollution atmosphérique OpenAQ
+### 3. Flux IoT - Pollution atmosphérique OpenAQ
 - **Source :** [OpenAQ API v3](https://api.openaq.org/)
 - **Polluants ciblés :** `PM2.5`, `PM10`, `NO2`, `O3`, `CO`.
 - **Variables :** `sensor_id`, `latitude`, `longitude`, `pollutant`, `value`, `unit`, `timestamp`.
