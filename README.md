@@ -86,7 +86,8 @@ UrbanHub/
 │   ├── 02_citybikes_stream.ipynb          # Pilotage de la collecte CityBikes
 │   ├── 03_openaq_iot.ipynb                # Pollution OpenAQ et table croisée city_hourly
 │   ├── 04_analyses_mobilite.ipynb         # Analyses de mobilité et croisement vélos, météo, pollution
-│   └── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
+│   ├── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
+│   └── 06_archives_citybikes.ipynb        # Archives CityBikes sur 5 ans (plan, téléchargement, schéma)
 ├── demos/                                 # Vidéos finales (non versionnées)
 │   ├── Démo-UrbanHub-Partie1.mp4          # Batch météo, Data Lake et vue météo
 │   └── Démo-UrbanHub-Partie2.mp4          # Streaming, IoT, croisements et Dashboard
