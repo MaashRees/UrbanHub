@@ -29,7 +29,7 @@ def load_env_file():
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
                         os.environ[k.strip()] = v.strip().strip("'\"")
-            print(f"📄 Fichier d'environnement chargé : {os.path.normpath(p)}")
+            print(f"Fichier d'environnement chargé : {os.path.normpath(p)}")
             return p
     return None
 
@@ -42,7 +42,7 @@ def get_minio_client():
     secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
     protocol = "https" if secure else "http"
-    print(f"🔌 Tentative de connexion S3 sur : {protocol}://{endpoint}")
+    print(f"Tentative de connexion S3 sur : {protocol}://{endpoint}")
     return Minio(
         endpoint,
         access_key=access_key,
@@ -59,24 +59,24 @@ def init_datalake():
 
     buckets = [bucket_bronze, bucket_silver, bucket_gold]
 
-    print("\n📦 Initialisation des couches du Data Lake S3 :")
+    print("\nInitialisation des couches du Data Lake S3 :")
     for bucket in buckets:
         try:
             if not client.bucket_exists(bucket):
                 client.make_bucket(bucket)
-                print(f"  ✨ Bucket '{bucket}' créé avec succès.")
+                print(f"  Bucket '{bucket}' créé avec succès.")
             else:
-                print(f"  ✅ Bucket '{bucket}' existe déjà et est accessible.")
+                print(f"  [OK] Bucket '{bucket}' existe déjà et est accessible.")
         except Exception as e:
-            print(f"  ❌ Erreur sur le bucket '{bucket}': {e}")
+            print(f"  [ERREUR] Erreur sur le bucket '{bucket}': {e}")
             sys.exit(1)
 
     # Activation du versioning sur Bronze
     try:
         client.set_bucket_versioning(bucket_bronze, VersioningConfig(ENABLED))
-        print(f"\n🛡️ Versioning activé avec succès sur le bucket '{bucket_bronze}' !")
+        print(f"\nVersioning activé avec succès sur le bucket '{bucket_bronze}' !")
     except Exception as e:
-        print(f"\nℹ️ Note Versioning sur '{bucket_bronze}' : {e} (normal sur certains tiers cloud sans API versioning explicite)")
+        print(f"\n[INFO] Note Versioning sur '{bucket_bronze}' : {e} (normal sur certains tiers cloud sans API versioning explicite)")
 
     # Test d'écriture / relecture
     try:
@@ -93,11 +93,11 @@ def init_datalake():
         resp.close()
         resp.release_conn()
         client.remove_object(bucket_bronze, "_healthcheck/test.txt")
-        print("\n🚀 Test d'écriture et de relecture validé avec succès sur le stockage distant !")
+        print("\nTest d'écriture et de relecture validé avec succès sur le stockage distant !")
     except Exception as e:
-        print(f"\n⚠️ Avertissement lors du test d'écriture/suppression : {e}")
+        print(f"\n[ATTENTION] Avertissement lors du test d'écriture/suppression : {e}")
 
-    print("\n🎉 Data Lake UrbanHub opérationnel et prêt pour l'équipe !")
+    print("\nData Lake UrbanHub opérationnel et prêt pour l'équipe !")
 
 if __name__ == "__main__":
     init_datalake()

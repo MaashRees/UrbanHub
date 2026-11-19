@@ -1,24 +1,24 @@
-# 🏙️ UrbanHub - Jumeau Numérique & Plateforme Data Lake Smart City
+# <img src="docs/assets/icons/building.svg" width="18" height="18" alt=""> UrbanHub - Jumeau Numérique & Plateforme Data Lake Smart City
 
 > **Projet M2 IPSSI** - Architecture Data Lake & Entrepôts de Données  
 > Système Big Data pour la collecte, le stockage et l'analyse croisée de données urbaines (Batch, Streaming, IoT).
 
 ---
 
-## 📑 Sommaire
+## <img src="docs/assets/icons/list.svg" width="18" height="18" alt=""> Sommaire
 
-1. [Présentation du projet](#-présentation-du-projet)
-2. [Architecture du Data Lake](#-architecture-du-data-lake)
-3. [Organisation du Répertoire](#-organisation-du-répertoire)
-4. [Sources de Données & Périmètre](#-sources-de-données--périmètre)
-5. [Prérequis & État de l'Environnement](#-prérequis--état-de-lenvironnement)
-6. [Guide de Démarrage Rapide](#-guide-de-démarrage-rapide)
-7. [Documentation & Suivi](#-documentation--suivi)
-8. [Livrables Attendus](#-livrables-attendus)
+1. [Présentation du projet](#présentation-du-projet)
+2. [Architecture du Data Lake](#architecture-du-data-lake)
+3. [Organisation du Répertoire](#organisation-du-répertoire)
+4. [Sources de Données & Périmètre](#sources-de-données--périmètre)
+5. [Prérequis & État de l'Environnement](#prérequis--état-de-lenvironnement)
+6. [Guide de Démarrage Rapide](#guide-de-démarrage-rapide)
+7. [Documentation & Suivi](#documentation--suivi)
+8. [Livrables Attendus](#livrables-attendus)
 
 ---
 
-## 📖 Présentation du projet
+## <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> Présentation du projet
 
 Une **Smart City** moderne génère en continu d'importants volumes de données hétérogènes :
 - Capteurs environnementaux et qualité de l'air (IoT)
@@ -29,7 +29,7 @@ Une **Smart City** moderne génère en continu d'importants volumes de données 
 
 ---
 
-## 🏛️ Architecture du Data Lake
+## <img src="docs/assets/icons/building.svg" width="18" height="18" alt=""> Architecture du Data Lake
 
 Le système s'articule autour de trois couches de stockage et de raffinage de données :
 
@@ -51,13 +51,13 @@ Le système s'articule autour de trois couches de stockage et de raffinage de do
                          [ Dashboard Voilà ]  Visualisations & KPI interactifs
 ```
 
-- **🥉 Bronze :** Stockage brut des payloads API et fichiers sources avec métadonnées d'ingestion (S3 / MinIO).
-- **🥈 Silver :** Format Parquet colonnaire optimisé, schéma strict, timestamps unifiés en UTC, conversions d'unités et déduplication.
-- **🥇 Gold :** Vues décisionnelles agrégées par ville et heure (`weather_daily`, `mobility_station_latest`, `pollution_hourly`, `city_hourly`).
+- **<img src="docs/assets/icons/layers-bronze.svg" width="18" height="18" alt=""> Bronze :** Stockage brut des payloads API et fichiers sources avec métadonnées d'ingestion (S3 / MinIO).
+- **<img src="docs/assets/icons/layers-silver.svg" width="18" height="18" alt=""> Silver :** Format Parquet colonnaire optimisé, schéma strict, timestamps unifiés en UTC, conversions d'unités et déduplication.
+- **<img src="docs/assets/icons/layers-gold.svg" width="18" height="18" alt=""> Gold :** Vues décisionnelles agrégées par ville et heure (`weather_daily`, `mobility_station_latest`, `pollution_hourly`, `city_hourly`).
 
 ---
 
-## 📁 Organisation du Répertoire
+## <img src="docs/assets/icons/folder.svg" width="18" height="18" alt=""> Organisation du Répertoire
 
 ```text
 UrbanHub/
@@ -84,7 +84,7 @@ UrbanHub/
 
 ---
 
-## 🌐 Sources de Données & Périmètre
+## <img src="docs/assets/icons/globe.svg" width="18" height="18" alt=""> Sources de Données & Périmètre
 
 ### 1. Flux Batch — Météo Open-Meteo
 
@@ -138,7 +138,7 @@ Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrabl
 
 ---
 
-## ⚙️ Prérequis & État de l'Environnement
+## <img src="docs/assets/icons/sliders.svg" width="18" height="18" alt=""> Prérequis & État de l'Environnement
 
 L'infrastructure a été auditée et validée sous **Windows 11** :
 
@@ -155,7 +155,7 @@ L'infrastructure a été auditée et validée sous **Windows 11** :
 
 ---
 
-## 🚀 Guide de Démarrage Rapide
+## <img src="docs/assets/icons/rocket.svg" width="18" height="18" alt=""> Guide de Démarrage Rapide
 
 ### 1. Naviguer dans le dossier du projet
 ```powershell
@@ -191,17 +191,17 @@ uv run jupyter notebook
 
 ---
 
-## 📚 Documentation & Suivi
+## <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> Documentation & Suivi
 
-- 📖 [Cahier des charges complet (ENONCE.md)](docs/ENONCE.md)
-- 🗺️ [Feuille de route & Plan d'architecture (PLAN.md)](docs/PLAN.md)
-- 📊 [Tableau de bord de l'avancement (AVANCEMENT.md)](docs/AVANCEMENT.md)
-- 📘 [Guide Technique & Recettes d'Architecture (GUIDE_TECHNIQUE.md)](docs/GUIDE_TECHNIQUE.md)
-- ☁️ [Guide Data Lake Cloud & Bascule R2 (DATALAKE_CLOUD_GUIDE.md)](docs/DATALAKE_CLOUD_GUIDE.md)
+- <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> [Cahier des charges complet (ENONCE.md)](docs/ENONCE.md)
+- <img src="docs/assets/icons/map.svg" width="18" height="18" alt=""> [Feuille de route & Plan d'architecture (PLAN.md)](docs/PLAN.md)
+- <img src="docs/assets/icons/bar-chart.svg" width="18" height="18" alt=""> [Tableau de bord de l'avancement (AVANCEMENT.md)](docs/AVANCEMENT.md)
+- <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> [Guide Technique & Recettes d'Architecture (GUIDE_TECHNIQUE.md)](docs/GUIDE_TECHNIQUE.md)
+- <img src="docs/assets/icons/cloud.svg" width="18" height="18" alt=""> [Guide Data Lake Cloud & Bascule R2 (DATALAKE_CLOUD_GUIDE.md)](docs/DATALAKE_CLOUD_GUIDE.md)
 
 ---
 
-## 📦 Livrables Attendus
+## <img src="docs/assets/icons/package.svg" width="18" height="18" alt=""> Livrables Attendus
 
 1. **Scripts d'ingestion & pipelines :** Code modulaire et documenté pour les 3 flux.
 2. **Stockage structuré :** Données partitionnées dans MinIO (Bronze ➔ Silver ➔ Gold).
