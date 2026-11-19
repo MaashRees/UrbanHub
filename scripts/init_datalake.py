@@ -13,18 +13,27 @@ from minio import Minio
 from minio.error import S3Error
 from minio.versioningconfig import VersioningConfig, ENABLED
 
-# Chargement du fichier .env si présent
-try:
-    from dotenv import load_dotenv
-    # Cherche .env dans le dossier courant ou dans UrbanHub/
-    if os.path.exists(".env"):
-        load_dotenv(".env")
-    elif os.path.exists("UrbanHub/.env"):
-        load_dotenv("UrbanHub/.env")
-    elif os.path.exists("../.env"):
-        load_dotenv("../.env")
-except ImportError:
-    pass
+# Chargement automatique et garanti du fichier .env
+def load_env_file():
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        "UrbanHub/.env",
+        ".env",
+        "../.env"
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ[k.strip()] = v.strip().strip("'\"")
+            print(f"📄 Fichier d'environnement chargé : {os.path.normpath(p)}")
+            return p
+    return None
+
+load_env_file()
 
 def get_minio_client():
     endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
