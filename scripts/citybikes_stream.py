@@ -8,7 +8,7 @@ Le script écrit les zones locales Bronze, Silver et Gold :
 
 Exemples :
     python scripts/citybikes_stream.py --once
-    python scripts/citybikes_stream.py --interval-seconds 180
+    python scripts/citybikes_stream.py --interval-seconds 300
 """
 
 from __future__ import annotations
@@ -376,7 +376,7 @@ def parse_args() -> argparse.Namespace:
     root = project_root()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true", help="effectue un seul micro-batch")
-    parser.add_argument("--interval-seconds", type=int, default=180, help="intervalle entre deux cycles (défaut: 180 = 3 min)")
+    parser.add_argument("--interval-seconds", type=int, default=300, help="intervalle entre deux cycles (défaut: 300 = 5 min)")
     parser.add_argument("--request-delay", type=float, default=1.0, help="délai entre les villes (défaut: 1 s)")
     parser.add_argument(
         "--storage",
