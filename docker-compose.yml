@@ -1,5 +1,5 @@
 services:
-  # Stockage Data Lake S3 (MinIO / Silo)
+  # 1. Stockage Data Lake S3 (MinIO / Silo)
   minio:
     image: docker.io/pgsty/silo:latest
     container_name: urbanhub-minio
@@ -14,13 +14,12 @@ services:
     command: server /data --console-address ":9001"
     restart: unless-stopped
 
-  # Environnement de Traitement Data & Dashboard (Jupyter + Voilà)
-  app:
+  # 2. Environnement de Développement Data (Jupyter Notebook)
+  jupyter:
     build: .
-    container_name: urbanhub-app
+    container_name: urbanhub-jupyter
     ports:
       - "8888:8888"   # Interface Jupyter Notebook
-      - "8866:8866"   # Dashboard interactif Voilà
     environment:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minioadmin
@@ -31,4 +30,23 @@ services:
       - .:/app
     depends_on:
       - minio
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+    restart: unless-stopped
+
+  # 3. Service Dashboard Public (Voilà Standalone)
+  dashboard:
+    build: .
+    container_name: urbanhub-dashboard
+    ports:
+      - "8866:8866"   # Dashboard interactif Voilà dédié
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_SECURE=false
+    volumes:
+      - .:/app
+    depends_on:
+      - minio
+    command: voila notebooks/05_dashboard.ipynb --port=8866 --no-browser --Voila.ip=0.0.0.0
     restart: unless-stopped
