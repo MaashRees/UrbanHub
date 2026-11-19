@@ -191,6 +191,35 @@ def discover_city_sensors(aq_client: OpenAQClient, cities: list, radius_m: int =
 # 4. INGESTION EN ZONE BRONZE (JSON BRUT + PARTITIONNEMENT HIVE)
 # ==============================================================================
 
+def fetch_all_measurements(aq_client: OpenAQClient, sensor_id, params: dict, max_pages: int = 20):
+    """Lit toutes les pages de /sensors/{id}/measurements.
+
+    OpenAQ renvoie les mesures de la plus ancienne à la plus récente et plafonne chaque page
+    à `limit` lignes. Sans pagination, on ne garde que le début de la fenêtre et les mesures
+    les plus récentes sont perdues. On enchaîne donc les pages tant qu'une page est pleine.
+    La réponse renvoyée garde la forme d'une réponse unique (meta + results concaténés).
+    """
+    limit = params.get("limit", 300)
+    merged = None
+    pages = 0
+    for page in range(1, max_pages + 1):
+        res = aq_client.get(f"sensors/{sensor_id}/measurements", params={**params, "page": page})
+        if not res or not res.get("results"):
+            break
+        pages = page
+        if merged is None:
+            merged = res
+            merged["results"] = list(res["results"])
+        else:
+            merged["results"].extend(res["results"])
+        if len(res["results"]) < limit:
+            break
+        time.sleep(0.05)
+    if merged is not None:
+        merged.setdefault("meta", {})["pages_fetched"] = pages
+    return merged
+
+
 def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalog: list, max_sensors_per_pollutant: int = 2):
     now = datetime.now(timezone.utc)
     date_path = now.strftime("year=%Y/month=%m/day=%d")
@@ -223,10 +252,10 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
             "datetime_from": dt_from,
             "limit": 300
         }
-        res = aq_client.get(f"sensors/{sid}/measurements", params=params)
+        res = fetch_all_measurements(aq_client, sid, params)
         if not res or not res.get("results"):
             continue
-            
+
         payload = {
             "sensor_metadata": s,
             "ingestion_utc": now.isoformat(),
@@ -367,7 +396,7 @@ def clean_and_transform_to_silver(minio_client: Minio):
     initial_len = len(df)
     df = df.drop_duplicates(subset=["sensor_id", "timestamp_utc"]).reset_index(drop=True)
     duplicates_removed = initial_len - len(df)
-    print(f"🧹 Déduplication : {duplicates_removed} doublons supprimés sur {initial_len} lignes.")
+    print(f"Déduplication : {duplicates_removed} doublons supprimés sur {initial_len} lignes.")
     
     # Sauvegarde Parquet dans Silver
     now = datetime.now(timezone.utc)
