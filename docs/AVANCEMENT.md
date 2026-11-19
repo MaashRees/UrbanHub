@@ -45,11 +45,12 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 2 - Flux Streaming : Mobilité CityBikes (Fréquence 2-3 min)
 - [x] Validation du endpoint `api.citybik.es/v2/networks` et identification des réseaux dans [config/cities.yml](../config/cities.yml) (`velib`, `velov`, `vlille`)
-- [x] [Script de collecte](../scripts/citybikes_stream.py) toutes les 180 s, avec reprise sur erreurs serveur et sans rejeu automatique des `429`
+- [x] [Script de collecte](../scripts/citybikes_stream.py) avec reprise sur erreurs serveur et sans rejeu automatique des `429`. Intervalle par défaut de 300 s ; l'énoncé demande 2 à 3 minutes, donc lancer avec `--interval-seconds 180`
 - [x] [Notebook de pilotage](../notebooks/02_citybikes_stream.ipynb) (PR #10) ; il est livré sans sorties enregistrées
 - [x] **Bronze**, **Silver** et **Gold** publiés dans R2 : 2 248 stations, 6 relevés, `mobility_station_latest` et `mobility_hourly`
 - [ ] Collecte **continue** sur plusieurs jours : au 19/11/2026, 2 cycles seulement (11:09 et 11:39 UTC). Sans elle, ni pics journaliers ni déséquilibres géographiques ne sont démontrables
-- [ ] Gold calculé à partir du Silver **local** de la machine qui collecte : une autre machine qui collecte écrase les tables Gold partagées avec sa propre vue. À corriger en recalculant depuis le Silver de R2
+- [x] Gold calculé depuis le Silver **publié** quand on est en ligne (R2/MinIO), et tout en local avec `--storage local` : le Silver local d'une machine n'entre plus jamais dans le Gold partagé. Seules les deux dernières heures sont relues puis fusionnées avec le Gold publié
+- [ ] Reconstruire le Gold publié avec `python scripts/citybikes_stream.py --rebuild-gold` : il contient aujourd'hui 3 heures sans Silver en ligne (cycles collectés hors R2), soit 6 lignes horaires au lieu de 3
 - [ ] Planifier la collecte (service dans `docker-compose.yml`) au lieu d'une fenêtre laissée ouverte
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 3 - Flux IoT : Pollution atmosphérique OpenAQ
