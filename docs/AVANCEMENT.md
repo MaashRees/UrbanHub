@@ -55,13 +55,15 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [ ] Analyse croisée météo vs mobilité douce (impact pluie / température sur le vélo)
 - [ ] Synthèse des corrélations et seuils de criticité
 
-### 🔹 Partie 5 — Restitution, Sécurité & Démonstrations
+### 🔹 Partie 5 — Restitution, Sécurité & Démonstrations (Rôle Seer - Membre 4)
+- [x] Création de la stack Docker simple : `Dockerfile` et `docker-compose.yml` (MinIO Silo + Jupyter + Voilà)
+- [x] Script d'initialisation automatique du Data Lake : `scripts/init_datalake.py` (création buckets et versioning)
+- [x] Initialisation du squelette du Dashboard Voilà : `notebooks/05_dashboard.ipynb` (sélecteurs de villes et onglets)
 - [ ] Configuration de l'utilisateur IAM restreint pour le frontend (cf. [policy_gold.json](../../policy_gold.json))
-- [ ] Configuration de l'interface de visualisation (Voilà / Dashboard)
-- [ ] Vues dédiées : Météo, Mobilité, Pollution, Analyses croisées
+- [ ] Branchement des premiers KPI réels dans le dashboard dès réception des tables Gold
 - [ ] Génération d'URLs pré-signées pour le partage de synthèses (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#37-partage-sécurisé-par-urls-pré-signées))
-- [ ] Enregistrement vidéo 1 : `demos/Démo-UrbanHub-Partie1.mp4` (Batch NOAA & Data Lake)
-- [ ] Enregistrement vidéo 2 : `demos/Démo-UrbanHub-Partie2.mp4` (Flux continus, Dashboard & Croisements)
+- [ ] Enregistrement vidéo 1 : `demos/Démo-UrbanHub-Partie1.mp4` (avec Rémi)
+- [ ] Enregistrement vidéo 2 : `demos/Démo-UrbanHub-Partie2.mp4` (avec Conambot et Julie)
 
 ---
 
