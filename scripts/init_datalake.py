@@ -63,6 +63,9 @@ def init_datalake():
     for bucket in buckets:
         try:
             if not client.bucket_exists(bucket):
+                if os.getenv("ALLOW_BUCKET_CREATION", "false").lower() != "true":
+                    print(f"  [ERREUR] Bucket '{bucket}' introuvable : vérifier MINIO_BUCKET_* dans .env (création désactivée).")
+                    sys.exit(1)
                 client.make_bucket(bucket)
                 print(f"  Bucket '{bucket}' créé avec succès.")
             else:

@@ -75,7 +75,8 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Table Gold transversale `kpis/city_hourly.parquet` reconstruite avec la météo Open-Meteo : 181 050 lignes sans doublon, dont **963 heures pollution et météo** et **6 heures à trois sources**
 - [x] Météo contre pollution (969 heures) : corrélation du vent avec le NO2 de **−0,61** et avec les PM2,5 de **−0,57** ; pluie contre PM10 de −0,16. Période courte (2 semaines de pollution), à présenter comme un premier résultat
 - [ ] Météo contre mobilité douce : seulement 6 heures communes, en attente de la collecte vélos continue
-- [x] Cellule simulée du notebook 03 remplacée par une analyse réelle : vent contre NO2 rho -0,65 (970 heures), vent contre PM2,5 rho -0,67 (742 heures), PM10 médiane 11,3 µg/m³ avec pluie contre 19,1 sans (p < 1e-8), ozone corrélé positivement au vent et à la température
+- [x] Cellule simulée du notebook 03 remplacée par une analyse réelle : vent contre NO2 rho -0,65 (970 heures), vent contre PM2,5 rho -0,67 (742 heures), PM10 médiane 11,3 µg/m³ avec pluie contre 19,1 sans (p < 1e-8), ozone corrélé positivement au vent et à la température (ces valeurs portent sur 2 semaines de données en direct : elles ne sont pas représentatives)
+- [x] Archives 2022-2026 publiées dans R2 (Open-Meteo avec visibilité, OpenAQ Bronze, Silver et Gold historiques) et analysées dans le notebook 07 : sur 5 ans, vent contre NO2 rho -0,36 (94 297 heures), vent contre PM2,5 rho -0,33, PM10 médiane 10,3 µg/m³ avec pluie contre 15,7 sans, PM2,5 5,9 contre 8,5
 - [ ] Synthèse finale des corrélations et seuils de criticité, quand la collecte vélos couvrira plusieurs jours
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 5 - Restitution, Sécurité & Démonstrations (Rôle Seer - Membre 4)

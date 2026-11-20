@@ -108,9 +108,9 @@ MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin123
 MINIO_SECURE=false
-MINIO_BUCKET_BRONZE=bronze
-MINIO_BUCKET_SILVER=silver
-MINIO_BUCKET_GOLD=gold
+MINIO_BUCKET_BRONZE=urbanhub-bronze
+MINIO_BUCKET_SILVER=urbanhub-silver
+MINIO_BUCKET_GOLD=urbanhub-gold
 OPENAQ_API_KEY=votre_cle_openaq
 ```
 
@@ -156,7 +156,7 @@ client = Minio(
 )
 
 # Test upload dans Bronze
-bucket = os.getenv('MINIO_BUCKET_BRONZE', 'bronze')
+bucket = os.getenv('MINIO_BUCKET_BRONZE', 'urbanhub-bronze')
 client.put_object(bucket, 'test_cloud.txt', io.BytesIO(b'Connexion Cloud OK!'), 19)
 print(f'[OK] Succès : fichier écrit dans {bucket} sur le Cloud !')
 

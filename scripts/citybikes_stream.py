@@ -122,13 +122,21 @@ def build_minio_client() -> tuple[Minio, dict[str, str]]:
 
 
 def ensure_bucket(client: Minio, bucket: str) -> None:
-    """Crée le bucket cible s'il n'existe pas encore."""
+    """Vérifie que le bucket existe. Il n'est JAMAIS créé, sauf si ALLOW_BUCKET_CREATION=true (MinIO local).
+
+    Les trois couches du lac s'appellent urbanhub-bronze, urbanhub-silver et urbanhub-gold (variables
+    MINIO_BUCKET_* du .env) : un nom incorrect doit produire une erreur, pas un nouveau bucket.
+    """
     try:
-        if not client.bucket_exists(bucket):
+        if client.bucket_exists(bucket):
+            return
+        if env_bool(os.getenv("ALLOW_BUCKET_CREATION")):
             client.make_bucket(bucket)
             LOG.info("Bucket MinIO créé : %s", bucket)
+            return
     except S3Error as error:
-        raise RuntimeError(f"Impossible de préparer le bucket MinIO {bucket}: {error}") from error
+        raise RuntimeError(f"Impossible de vérifier le bucket {bucket}: {error}") from error
+    raise RuntimeError(f"Bucket {bucket} introuvable : vérifier MINIO_BUCKET_* dans .env (création désactivée).")
 
 
 def upload_file(client: Minio, bucket: str, local_path: Path, object_name: str) -> None:

@@ -31,11 +31,11 @@ def load_config():
     return cities_cfg
 
 def get_bucket_names(endpoint: str):
-    is_r2 = "r2.cloudflarestorage.com" in endpoint
+    # Mêmes noms en local et sur R2 : urbanhub-bronze, urbanhub-silver, urbanhub-gold.
     return {
-        "bronze": os.getenv("MINIO_BUCKET_BRONZE", "urbanhub-bronze" if is_r2 else "bronze"),
-        "silver": os.getenv("MINIO_BUCKET_SILVER", "urbanhub-silver" if is_r2 else "silver"),
-        "gold": os.getenv("MINIO_BUCKET_GOLD", "urbanhub-gold" if is_r2 else "gold"),
+        "bronze": os.getenv("MINIO_BUCKET_BRONZE", "urbanhub-bronze"),
+        "silver": os.getenv("MINIO_BUCKET_SILVER", "urbanhub-silver"),
+        "gold": os.getenv("MINIO_BUCKET_GOLD", "urbanhub-gold"),
     }
 
 def init_datalake_client():
@@ -56,13 +56,11 @@ def init_datalake_client():
     buckets = get_bucket_names(endpoint)
     for b_name in buckets.values():
         if not client.bucket_exists(b_name):
-            try:
+            if os.getenv("ALLOW_BUCKET_CREATION", "false").lower() == "true":
                 client.make_bucket(b_name)
                 print(f"Bucket '{b_name}' créé.")
-            except Exception as e:
-                print(f"Note bucket '{b_name}': {e}")
-        else:
-            pass
+            else:
+                raise RuntimeError(f"Bucket '{b_name}' introuvable : vérifier MINIO_BUCKET_* dans .env (création désactivée).")
             
     bronze_b = buckets["bronze"]
     try:
