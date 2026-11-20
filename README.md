@@ -217,6 +217,7 @@ uv run jupyter notebook
 - <img src="docs/assets/icons/thermometer.svg" width="18" height="18" alt=""> [Migration météo NOAA vers Open-Meteo (MIGRATION_OPENMETEO.md)](docs/MIGRATION_OPENMETEO.md)
 - <img src="docs/assets/icons/rocket.svg" width="18" height="18" alt=""> [Faire tourner la collecte en continu (DEPLOIEMENT_CONTINU.md)](docs/DEPLOIEMENT_CONTINU.md)
 - <img src="docs/assets/icons/list.svg" width="18" height="18" alt=""> [Messages à envoyer à l'équipe (MESSAGES_EQUIPE.md)](docs/MESSAGES_EQUIPE.md)
+- <img src="docs/assets/icons/clipboard.svg" width="18" height="18" alt=""> [Reste à faire, répartition et budget de stockage (RESTE_A_FAIRE.md)](docs/RESTE_A_FAIRE.md)
 
 ---
 
