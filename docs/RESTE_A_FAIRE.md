@@ -55,7 +55,6 @@ Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
 | **Julie** | Rendre le Silver OpenAQ incrémental (il relit tout le Bronze à chaque exécution) | moyenne |
 | **Julie** | Relire l'interprétation pollution du notebook 07 et rédiger les conclusions | petite |
 | **Rémi** | Décider quoi publier de la météo avec visibilité (`weather_hourly_visibility`) et l'intégrer au Gold si accepté ; Lille n'a de visibilité que depuis le 26/06/2024 | petite |
-| **Rémi** | Mettre à jour `RESULTATS_NOAA.md` en bilan Open-Meteo sur 5 ans | petite |
 | **Seer** | Nettoyer R2 (`sample/`, ancien NOAA), créer l'utilisateur en lecture seule pour le dashboard | petite |
 | **Seer** | Dashboard : onglet mobilité historique une fois les tables publiées | petite |
 | **Seer** | README final, guide, coordination des vidéos | petite |
@@ -92,7 +91,7 @@ Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
 **À Rémi**
 
 > 1) La visibilité : Paris et Lyon l'ont depuis 2022 avec l'API `historical-forecast`, Lille seulement depuis le 26/06/2024. Veux-tu publier cette table dans le Gold ?
-> 2) Mets à jour le bilan météo (`RESULTATS_NOAA.md`) avec les 5 ans Open-Meteo.
+> 2) Le [bilan météo Open-Meteo 2022–2026](RESULTATS_NOAA.md) est rédigé à partir du notebook 07.
 
 **À Seer (moi)**
 

@@ -15,7 +15,7 @@ Ce document sert de cahier des charges pour Rémi et de mémoire de la décision
 
 | Constat | Preuve |
 | :--- | :--- |
-| L'archive NOAA ISD est arrêtée depuis le **24 août 2025** | [RESULTATS_NOAA.md](RESULTATS_NOAA.md), `LAST_ISD_YEAR = 2025` dans `scripts/noaa_batch.py` |
+| L'archive NOAA ISD est arrêtée depuis le **24 août 2025** | [Bilan NOAA archivé](ARCHIVE_RESULTATS_NOAA.md), `LAST_ISD_YEAR = 2025` dans `scripts/noaa_batch.py` |
 | Aucun recouvrement possible avec les flux de 2026 | Pollution : 5 → 19 novembre 2026. Vélos : 19 novembre 2026. Météo NOAA : jusqu'en 2024. |
 | La précipitation NOAA est inutilisable | Dans `kpis/weather_hourly.parquet`, **0 heure de pluie sur 129 809** (max 0,0 mm). Les questions « météo et vélos » et « météo et pollution par la pluie » ne peuvent pas être traitées. |
 | Besoin de données **toujours fraîches** | Exigence de l'équipe : le tableau de bord doit refléter la météo de l'heure courante. |
@@ -144,8 +144,8 @@ Règles de cohérence :
 - [ ] Respecter le contrat de la section 4, en particulier le décalage d'une heure de la précipitation et l'UTC.
 - [ ] Mode rafraîchissement (section 5) et service dans `docker-compose.yml`.
 - [ ] Lancer le remplissage 5 ans **sans** `--upload`, vérifier avec le diagnostic ci-dessous, prévenir Julie et Seer, puis publier.
-- [ ] Mettre à jour `notebooks/01_noaa_batch.ipynb` (renommer, nouvelle source, vraie pluie, visibilité signalée comme modélisée) et remplacer [RESULTATS_NOAA.md](RESULTATS_NOAA.md) par un bilan Open-Meteo. Conserver l'ancien comme historique.
-- [ ] Reprendre les quatre questions météo avec les nouvelles données.
+- [x] Documenter le nouveau flux dans [le notebook 01 Open-Meteo](../notebooks/01_openmeteo_batch.ipynb) et publier le [bilan Open-Meteo 2022–2026](RESULTATS_NOAA.md), en conservant le [bilan NOAA](ARCHIVE_RESULTATS_NOAA.md) comme historique.
+- [x] Reprendre les quatre questions météo à partir des sorties du [notebook 07](../notebooks/07_analyses_historiques.ipynb).
 
 **Contrôle d'acceptation** (à relancer avant et après publication) :
 1. Mêmes colonnes et même clé que l'actuel `weather_hourly.parquet`.

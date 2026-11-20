@@ -2,9 +2,9 @@
 
 ## Source et périmètre
 
-Open-Meteo est la source météo de référence d’UrbanHub. Le changement a été validé avec l’enseignant : l’archive NOAA ISD s’arrête le **24 août 2025**, ce qui empêchait le croisement avec les collectes de 2026. De plus, le traitement NOAA ne retenait aucun cumul positif de pluie pour les trois villes. Le passage à Open-Meteo apporte des séries horaires plus récentes et des cumuls de précipitations exploitables. Le [dossier de migration](https://github.com/Thekorzeremi/UrbanHub/blob/0e93a5769af44b90dcce79655760d3803a9e574d/docs/MIGRATION_OPENMETEO.md) détaille cette décision ; le [bilan NOAA 2020–2024](ARCHIVE_RESULTATS_NOAA.md) est conservé comme archive.
+Open-Meteo est la source météo de référence d’UrbanHub. Le changement a été validé avec l’enseignant : l’archive NOAA ISD s’arrête le **24 août 2025**, ce qui empêchait le croisement avec les collectes de 2026. De plus, le traitement NOAA ne retenait aucun cumul positif de pluie pour les trois villes. Le passage à Open-Meteo apporte des séries horaires plus récentes et des cumuls de précipitations exploitables. Le [dossier de migration](MIGRATION_OPENMETEO.md) détaille cette décision ; le [bilan NOAA 2020–2024](ARCHIVE_RESULTATS_NOAA.md) est conservé comme archive.
 
-Le [notebook 01](../notebooks/01_openmeteo_batch.ipynb) décrit le flux météo par ville : collecte Open-Meteo, horodatage UTC, agrégations horaires et journalières. Les chiffres ci-dessous reprennent les sorties du **volet météo (sections 1 à 4) du [notebook 07](https://github.com/Thekorzeremi/UrbanHub/blob/0e93a5769af44b90dcce79655760d3803a9e574d/notebooks/07_analyses_historiques.ipynb)**, qui exploite les archives historiques enrichies en visibilité. Celles-ci couvrent **5 352 jours-ville** à Paris, Lyon et Lille, du **1er janvier 2022 au 19 novembre 2026**. La fenêtre couvre cinq années civiles, dont **2026 est incomplète**. Les valeurs sont des estimations de modèle aux coordonnées des trois villes, pas des relevés de station ni une moyenne de la France entière.
+Le [notebook 01](../notebooks/01_openmeteo_batch.ipynb) décrit le flux météo par ville : collecte Open-Meteo, horodatage UTC, agrégations horaires et journalières. Les chiffres ci-dessous reprennent les sorties du **volet météo (sections 1 à 4) du [notebook 07](../notebooks/07_analyses_historiques.ipynb)**, qui exploite les archives historiques enrichies en visibilité. Celles-ci couvrent **5 352 jours-ville** à Paris, Lyon et Lille, du **1er janvier 2022 au 19 novembre 2026**. La fenêtre couvre cinq années civiles, dont **2026 est incomplète**. Les valeurs sont des estimations de modèle aux coordonnées des trois villes, pas des relevés de station ni une moyenne de la France entière.
 
 ## 1. Périodes météorologiques anormales
 
@@ -35,7 +35,7 @@ Lyon est la plus chaude en moyenne annuelle et Lille la plus fraîche sur chacun
 | Lyon | 40,3 °C — 24/08/2023 | −7,3 °C — 01/01/2026 | 14,8 m/s — 09/10/2024 | 74,8 mm — 07/09/2024 |
 | Paris | 40,3 °C — 24/06/2026 | −6,3 °C — 06/01/2026 | 13,1 m/s — 21/02/2022 et 02/11/2023 | 54,8 mm — 09/10/2024 |
 
-Les deux plus fortes températures du lot sont donc identiques à Lyon et Paris, mais surviennent lors d’épisodes distincts. Lille présente le vent horaire le plus fort des trois villes, tandis que Lyon présente le cumul journalier de pluie le plus élevé. Les dates sont en UTC ; ces chiffres sont des extrêmes du modèle à la résolution du lot, pas des records mesurés en station.
+Lyon et Paris atteignent tous deux **40,3 °C à la précision affichée**, lors d’épisodes distincts. Lille présente le vent horaire le plus fort des trois villes, tandis que Lyon présente le cumul journalier de pluie le plus élevé. Les dates sont en UTC ; ces chiffres sont des extrêmes du modèle à la résolution du lot, pas des records mesurés en station.
 
 ## 4. Météo et visibilité
 

@@ -68,7 +68,8 @@ UrbanHub/
 │   ├── GUIDE_TECHNIQUE.md                 # Recettes, patterns de code et capitalisation des TPs
 │   ├── DATALAKE_CLOUD_GUIDE.md            # Bascule du Data Lake local vers Cloudflare R2
 │   ├── MIGRATION_OPENMETEO.md             # Passage de la météo NOAA à Open-Meteo
-│   ├── RESULTATS_NOAA.md                  # Bilan historique du lot NOAA 2020-2024
+│   ├── RESULTATS_NOAA.md                  # Bilan de référence Open-Meteo 2022–2026
+│   ├── ARCHIVE_RESULTATS_NOAA.md          # Bilan historique NOAA 2020–2024
 │   └── assets/icons/                      # Icônes SVG utilisées dans les documents
 ├── config/
 │   └── cities.yml                         # Référentiel des villes et métadonnées
