@@ -291,6 +291,132 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
     print(f"[OK] Total Bronze : {len(ingested_keys)} objets sauvegardés dans {bronze_bucket}.")
     return ingested_keys
 
+def compare_openaq_archive_api(
+    aq_client: OpenAQClient,
+    catalog: list,
+    days: int = 3,
+    max_sensors_per_pollutant: int = 5,
+) -> pd.DataFrame:
+    """
+    Compare les mesures horaires de l'API OpenAQ aux fichiers journaliers
+    publics de l'archive AWS OpenAQ sur plusieurs capteurs.
+
+    Hypothese verifiee: la colonne datetime de l'archive correspond a la fin
+    de l'intervalle horaire. Elle est decalee d'une heure pour rejoindre
+    datetimeFrom utilise par la couche Silver.
+    """
+    selected = []
+    by_pollutant = {}
+    seen_locations = set()
+    for entry in catalog:
+        pollutant = entry.get("pollutant")
+        location_id = entry.get("location_id")
+        if not pollutant or not location_id:
+            continue
+        if (pollutant, location_id) in seen_locations:
+            continue
+        seen_locations.add((pollutant, location_id))
+        by_pollutant.setdefault(pollutant, [])
+        if len(by_pollutant[pollutant]) < max_sensors_per_pollutant:
+            by_pollutant[pollutant].append(entry)
+            selected.append(entry)
+
+    archive_end = datetime.now(timezone.utc).date() - timedelta(days=3)
+    archive_start = archive_end - timedelta(days=days - 1)
+    api_from = archive_start.strftime("%Y-%m-%dT00:00:00Z")
+    api_to = (archive_end + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+
+    comparison_rows = []
+    for entry in selected:
+        sensor_id = entry["sensor_id"]
+        location_id = entry["location_id"]
+        pollutant = entry["pollutant"]
+
+        api_data = aq_client.get(
+            f"sensors/{sensor_id}/hours",
+            params={
+                "datetime_from": api_from,
+                "datetime_to": api_to,
+                "limit": 100,
+                "page": 1,
+            },
+        )
+        api_by_timestamp = {}
+        if api_data:
+            for item in api_data.get("results", []):
+                period = item.get("period") or {}
+                dt_from = period.get("datetimeFrom") or {}
+                dt_str = dt_from.get("utc")
+                if dt_str and item.get("value") is not None:
+                    api_by_timestamp[pd.Timestamp(dt_str).floor("h")] = float(item["value"])
+
+        archive_by_timestamp = {}
+        current_date = archive_start
+        while current_date <= archive_end:
+            url = (
+                "https://openaq-data-archive.s3.amazonaws.com/"
+                f"records/csv.gz/locationid={location_id}/"
+                f"year={current_date.year}/month={current_date.month:02d}/"
+                f"location-{location_id}-{current_date.strftime('%Y%m%d')}.csv.gz"
+            )
+            try:
+                response = requests.get(url, timeout=30)
+                if response.status_code != 200:
+                    current_date += timedelta(days=1)
+                    continue
+                archive_df = pd.read_csv(io.BytesIO(response.content), compression="gzip")
+                sensor_column = "sensors_id" if "sensors_id" in archive_df.columns else "sensor_id"
+                if sensor_column not in archive_df.columns:
+                    current_date += timedelta(days=1)
+                    continue
+                archive_df = archive_df[
+                    (archive_df[sensor_column].astype(str) == str(sensor_id))
+                    & (archive_df["parameter"].str.lower() == pollutant)
+                ]
+                for row in archive_df.itertuples(index=False):
+                    archive_dt = pd.Timestamp(row.datetime)
+                    archive_from = archive_dt.tz_convert("UTC").floor("h") - timedelta(hours=1)
+                    archive_by_timestamp[archive_from] = float(row.value)
+            except (requests.RequestException, pd.errors.ParserError, OSError, ValueError):
+                pass
+            current_date += timedelta(days=1)
+
+        common_timestamps = sorted(set(api_by_timestamp) & set(archive_by_timestamp))
+        for timestamp in common_timestamps:
+            api_value = api_by_timestamp[timestamp]
+            archive_value = archive_by_timestamp[timestamp]
+            comparison_rows.append({
+                "sensor_id": str(sensor_id),
+                "location_id": str(location_id),
+                "location_name": entry.get("location_name"),
+                "city_id": entry.get("city_id"),
+                "pollutant": pollutant,
+                "timestamp_utc": timestamp,
+                "api_value": api_value,
+                "archive_value": archive_value,
+                "difference_archive_minus_api": archive_value - api_value,
+                "absolute_difference": abs(archive_value - api_value),
+            })
+
+    if not comparison_rows:
+        print("⚠️ Aucun horaire commun trouvé entre l'API et l'archive sur la période.")
+        return pd.DataFrame()
+
+    comparison = pd.DataFrame(comparison_rows)
+    print(
+        f"📊 Comparaison API/archive : {len(comparison)} heures communes "
+        f"sur {comparison['sensor_id'].nunique()} capteurs."
+    )
+    print(
+        comparison.groupby("pollutant").agg(
+            capteurs=("sensor_id", "nunique"),
+            heures_communes=("timestamp_utc", "count"),
+            mae=("absolute_difference", "mean"),
+            biais_archive_minus_api=("difference_archive_minus_api", "mean"),
+        ).round(3)
+    )
+    return comparison
+
 # ==============================================================================
 # 5. NETTOYAGE & TRANSFORMATION VERS SILVER (PARQUET, CONVERSION UNITÉS)
 # ==============================================================================
@@ -315,25 +441,51 @@ def clean_and_transform_to_silver(minio_client: Minio):
     buckets = get_bucket_names(endpoint)
     bronze_bucket = buckets["bronze"]
     silver_bucket = buckets["silver"]
-    
-    objects = list(minio_client.list_objects(bronze_bucket, prefix="openaq/", recursive=True))
-    if not objects:
-        print(f"[ATTENTION] Aucun objet trouvé dans {bronze_bucket}/openaq/")
-        # Si Silver existe déjà, charger la table existante
-        try:
-            resp = minio_client.get_object(silver_bucket, "pollution/pollution_france.parquet")
-            df = pd.read_parquet(io.BytesIO(resp.read()))
-            resp.close()
-            resp.release_conn()
-            print(f"[INFO] Relecture de la table existante {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
-            return df
-        except Exception:
-            return None
-        
+
+    silver_path = "pollution/pollution_france.parquet"
+    marker_path = "processing/openaq/silver_processed.json"
+    existing_df = None
+    processed_objects = set()
+
+    try:
+        resp = minio_client.get_object(silver_bucket, silver_path)
+        existing_df = pd.read_parquet(io.BytesIO(resp.read()))
+        resp.close()
+        resp.release_conn()
+    except Exception:
+        existing_df = None
+
+    try:
+        resp = minio_client.get_object(bronze_bucket, marker_path)
+        marker = json.loads(resp.read().decode("utf-8"))
+        resp.close()
+        resp.release_conn()
+        processed_objects = set(marker.get("processed_objects", []))
+    except Exception:
+        # Premier lancement: aucun marker, on traite tout le Bronze.
+        processed_objects = set()
+
+    all_objects = list(minio_client.list_objects(bronze_bucket, prefix="openaq/", recursive=True))
+    new_objects = [obj for obj in all_objects if obj.object_name not in processed_objects]
+    if not new_objects:
+        if existing_df is not None:
+            print(
+                f"ℹ️ Aucun nouvel objet Bronze. Silver relue depuis "
+                f"{silver_bucket}/{silver_path} ({len(existing_df)} lignes)."
+            )
+            return existing_df
+        print(f"⚠️ Aucun objet Bronze trouvé dans {bronze_bucket}/openaq/")
+        return None
+
+    print(
+        f"♻️ Silver incrémental : {len(new_objects)} nouvel/ nouveaux objet(s) "
+        f"sur {len(all_objects)} objet(s) Bronze."
+    )
+
     records = []
     treatment_timestamp = datetime.now(timezone.utc).isoformat()
-    
-    for obj in objects:
+
+    for obj in new_objects:
         resp = minio_client.get_object(bronze_bucket, obj.object_name)
         data = json.loads(resp.read().decode("utf-8"))
         resp.close()
@@ -393,13 +545,21 @@ def clean_and_transform_to_silver(minio_client: Minio):
             })
             
     if not records:
-        print("[ATTENTION] Aucun enregistrement valide extrait de Bronze.")
+        print("⚠️ Aucun enregistrement valide extrait de Bronze.")
+        if existing_df is not None:
+            return existing_df
         return None
         
     df = pd.DataFrame(records)
     df["timestamp_utc"] = pd.to_datetime(df["timestamp_utc"], utc=True)
+
+    if existing_df is not None:
+        df = pd.concat([existing_df, df], ignore_index=True)
     initial_len = len(df)
-    df = df.drop_duplicates(subset=["sensor_id", "timestamp_utc"]).reset_index(drop=True)
+    df = df.drop_duplicates(
+        subset=["sensor_id", "timestamp_utc"],
+        keep="last",
+    ).reset_index(drop=True)
     duplicates_removed = initial_len - len(df)
     print(f"Déduplication : {duplicates_removed} doublons supprimés sur {initial_len} lignes.")
     
