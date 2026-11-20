@@ -25,6 +25,7 @@ pandas, jamais exécutés.
 from __future__ import annotations
 
 import argparse
+import csv
 import gzip
 import json
 import logging
@@ -190,10 +191,11 @@ def print_plan(plan: dict[str, Any]) -> None:
 def validate_file(path: Path) -> dict[str, Any]:
     """Décompresse l'en-tête et vérifie les colonnes attendues (orthographes alternatives incluses)."""
     try:
-        with gzip.open(path, "rt", encoding="utf-8") as handle:
-            header = handle.readline().strip().lower().split(",")
+        with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+            # Depuis 2023, l'en-tête est entre guillemets ("location_id","sensors_id",...) : csv.reader les retire.
+            header = [c.strip().lower() for c in next(csv.reader([handle.readline()]), [])]
             rows = sum(1 for _ in handle)
-    except (OSError, EOFError, UnicodeDecodeError) as error:
+    except (OSError, EOFError, UnicodeDecodeError, csv.Error) as error:
         raise InvalidArchiveFile(str(error)) from error
     columns = {ALIASES.get(c, c) for c in header}
     missing = REQUIRED - columns
@@ -310,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--dry-run", action="store_true", help="plan et volumes seulement, aucun téléchargement")
     parser.add_argument("--silver", action="store_true", help="convertit les fichiers téléchargés en tables Silver annuelles")
-    parser.add_argument("--shift-hours", type=float, default=0.0, help="décalage appliqué à l'horodatage (à régler après comparaison avec l'API)")
+    parser.add_argument("--shift-hours", type=float, default=0.0, help="décalage appliqué à l'horodatage ; l'archive donne la FIN de période, -1 donne le début comme le Silver en direct (la transformation scripts/archives_to_gold.py l'applique par défaut)")
     parser.add_argument("--upload", action="store_true", help="publie Bronze (openaq-archive/) et Silver (pollution-archive/)")
     parser.add_argument("--max-files", type=int, default=30000, help="refuse de télécharger au-delà de ce nombre de fichiers")
     parser.add_argument("--max-gb", type=float, default=1.0, help="refuse de publier au-delà de ce volume")
