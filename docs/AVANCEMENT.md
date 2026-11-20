@@ -17,7 +17,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 | **Dashboard Voilà Dédié** | 🟢 Opérationnel | Service autonome `urbanhub-dashboard` actif sur le port `8866`. Endpoint validé HTTP 200 OK. | [http://localhost:8866](http://localhost:8866) |
 | **Environnement Python (uv)** | 🟢 Opérationnel | Python 3.11 avec `duckdb`, `pyarrow`, `pandas`, `minio`, `boto3`, `folium`, `seaborn`, `ipywidgets`, `scipy`. | [requirements.txt](../requirements.txt) |
 | **API CityBikes (Mobilité)** | 🟢 Accessible | Réponse HTTP 200 sur `http://api.citybik.es/v2/networks`. Prêt pour l'ingestion temps réel. | [config/cities.yml](../config/cities.yml) |
-| **NOAA Data (Météo)** | 🟢 Validé | Archive ISD Global Hourly accessible via NODD ; lot France 2020–2024 téléchargé et publié. | [Résultats NOAA](RESULTATS_NOAA.md) |
+| **NOAA Data (Météo)** | 🟢 Validé | Archive ISD Global Hourly accessible via NODD ; lot France 2020–2024 téléchargé et publié. | [Bilan NOAA archivé](ARCHIVE_RESULTATS_NOAA.md) |
 | **API OpenAQ (Pollution)** | 🟠 Action requise | **Attention :** L'API v2 est dépréciée (`HTTP 410 Gone`). L'API v3 requiert impérativement une clé d'API (`HTTP 401 Unauthorized` sans header `X-API-Key`). Une clé gratuite doit être générée sur le site officiel OpenAQ et placée dans [.env](../.env.example). | [GUIDE_TECHNIQUE.md (Section 3.4)](GUIDE_TECHNIQUE.md#34-ingestion-capteurs-openaq-v3-iot) |
 | **Structure du projet** | 🟢 Structuré | Dossier `docs/` créé avec [ENONCE.md](ENONCE.md), [PLAN.md](PLAN.md), [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md), [DATALAKE_CLOUD_GUIDE.md](DATALAKE_CLOUD_GUIDE.md) et ce fichier [AVANCEMENT.md](AVANCEMENT.md). | Arborescence UrbanHub |
 
@@ -29,7 +29,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] [Collecte Open-Meteo](../scripts/openmeteo_batch.py) sur Paris, Lyon et Lille depuis 2020 avec le même modèle ECMWF IFS.
 - [x] Bronze JSON et Silver Parquet Open-Meteo publiés. Gold horaire et quotidien publiés aux chemins partagés `kpis/weather_hourly.parquet` et `kpis/weather_daily.parquet` ; archives NOAA conservées sous `kpis/noaa/`.
 - [x] Relecture et vérification du Gold : jointure `(city_id, hour_utc)` en UTC, pluie alignée sur le début de chaque heure et visibilité laissée manquante quand absente de l’API. Au 19/11/2026, 181 050 heures-ville, 6 clés communes avec le Gold mobilité et 923 avec le Gold pollution ; aucune clé commune aux trois à cet instant.
-- [x] [Notebook d’analyse Open-Meteo](../notebooks/01_openmeteo_batch.ipynb) : couverture, saisonnalité, extrêmes et visibilité.
+- [x] [Notebook du flux Open-Meteo](../notebooks/01_openmeteo_batch.ipynb) exécuté et [bilan météo de référence 2022–2026](RESULTATS_NOAA.md) rédigé à partir du notebook 07 : périodes inhabituelles, saisonnalité, extrêmes et visibilité.
 - [ ] Planifier l’actualisation météo et rejouer le calcul de la table croisée lorsque les collectes mobilité et pollution se recouvrent.
 
 #### Archive NOAA ISD — lot France 2020–2024
@@ -40,7 +40,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Ingestion **Bronze** : 1 029 CSV bruts du lot France 2020–2024 publiés et vérifiés sous `noaa/year=AAAA/station_id=<identifiant>.csv` sur R2.
 - [ ] Versioning natif **Bronze** : bloqué sur Cloudflare R2, dont l’[API S3 ne prend pas en charge le versioning de bucket](https://developers.cloudflare.com/r2/api/s3/api/#unimplemented-bucket-level-operations). Les CSV restent disponibles en copie locale et leurs empreintes ont été vérifiées sur R2. Si le versioning natif est exigé pour la démo, le valider sur un bucket MinIO/Silo séparé.
 - [x] Nettoyage **Silver** : données traitées en mémoire par année avec pandas, conversion des unités et de l’horodatage en UTC, déduplication par station et instant ; cinq Parquets écrits avec PyArrow et vérifiés sur R2 (12 483 296 observations).
-- [x] Agrégations **Gold** et questions métier : `weather_hourly.parquet` (129 809 heures-ville) et `weather_daily.parquet` (5 450 jours-ville) publiés et relus sur R2 ; notebook France exécuté et conclusions rédigées sur la saisonnalité, les périodes inhabituelles, les extrêmes et la visibilité. [Résultats, limites et déroulé de démo](RESULTATS_NOAA.md).
+- [x] Agrégations **Gold** et questions métier : `weather_hourly.parquet` (129 809 heures-ville) et `weather_daily.parquet` (5 450 jours-ville) publiés et relus sur R2 ; notebook France exécuté et conclusions rédigées sur la saisonnalité, les périodes inhabituelles, les extrêmes et la visibilité. [Résultats NOAA archivés](ARCHIVE_RESULTATS_NOAA.md).
 - [ ] Filmer la séquence de démo NOAA avec Seer
 
 ### 🔹 Partie 2 — Flux Streaming : Mobilité CityBikes (Fréquence 2-3 min)
