@@ -68,7 +68,8 @@ UrbanHub/
 │   ├── GUIDE_TECHNIQUE.md                 # Recettes, patterns de code et capitalisation des TPs
 │   ├── DATALAKE_CLOUD_GUIDE.md            # Bascule du Data Lake local vers Cloudflare R2
 │   ├── MIGRATION_OPENMETEO.md             # Passage de la météo NOAA à Open-Meteo
-│   ├── RESULTATS_NOAA.md                  # Bilan historique du lot NOAA 2020-2024
+│   ├── RESULTATS_NOAA.md                  # Bilan de référence Open-Meteo 2022–2026
+│   ├── ARCHIVE_RESULTATS_NOAA.md          # Bilan historique NOAA 2020–2024
 │   └── assets/icons/                      # Icônes SVG utilisées dans les documents
 ├── config/
 │   └── cities.yml                         # Référentiel des villes et métadonnées
@@ -116,7 +117,7 @@ python scripts/openmeteo_batch.py --upload  # actualisation des tables partagée
 - Bronze : `openmeteo/year=AAAA/city_id=VILLE/archive.json` et `openmeteo/manifest.json`.
 - Silver : `weather/openmeteo/year=AAAA/weather_hourly.parquet`.
 - Gold : `kpis/weather_hourly.parquet` sur `(city_id, hour_utc)` en UTC ; `kpis/weather_daily.parquet` sur `(city_id, day_utc)` en UTC. Le rafraîchissement météo n’est pas planifié automatiquement.
-- Analyse : [notebook Open-Meteo](notebooks/01_openmeteo_batch.ipynb). Sources à créditer : Open-Meteo et ECMWF IFS.
+- Analyse : [bilan météo Open-Meteo 2022–2026](docs/RESULTATS_NOAA.md) et [notebook 01 sur le flux Open-Meteo](notebooks/01_openmeteo_batch.ipynb).
 
 #### Ancien flux - archive NOAA ISD
 - **Source :** [Archive NOAA ISD Global Hourly (NODD)](https://registry.opendata.aws/noaa-global-hourly/).
@@ -135,7 +136,7 @@ python scripts/noaa_batch.py --mode france --workers 8
 
 Le script reprend les CSV déjà téléchargés et distingue les fichiers absents (HTTP 404) des erreurs dans `bronze/noaa/manifest.json`. Les sorties sont sous `data/noaa-<mode>-<début>-<fin>/`. Avec `--upload`, le Gold du lot France est archivé sous `kpis/noaa/` ; l’échantillon utilise le préfixe `sample/2025-2025/`. L’analyse historique est dans [le notebook NOAA](notebooks/01_noaa_batch.ipynb).
 
-Le [bilan du lot France 2020–2024](docs/RESULTATS_NOAA.md) recense les livrables déjà publiés et vérifiés sur R2, les conclusions météo et la limite des mesures de pluie.
+Le [bilan archivé du lot NOAA France 2020–2024](docs/ARCHIVE_RESULTATS_NOAA.md) recense les livrables, les conclusions météo et la limite des mesures de pluie.
 
 ### 2. Flux Streaming - Mobilité CityBikes
 - **Source :** [CityBikes API](http://api.citybik.es/v2/networks)
