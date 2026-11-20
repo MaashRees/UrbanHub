@@ -207,6 +207,34 @@ def publish(root: Path, results: list[dict[str, Any]]) -> int:
     return sent
 
 
+def publish_silver(paths: list[Path]) -> int:
+    """Publie les Silver horaires (un fichier par réseau et par année) dans le bucket Silver existant.
+
+    Clé : citybikes-archive/year=AAAA/citybikes_stations_hourly_<réseau>.parquet. Aucun objet existant n'est
+    écrasé et aucun bucket n'est créé. Le Bronze brut (environ 950 Mo) n'est pas publié : il se retélécharge
+    depuis la source publique.
+    """
+    try:
+        from citybikes_stream import build_minio_client
+    except ImportError:
+        from scripts.citybikes_stream import build_minio_client
+    client, buckets = build_minio_client()
+    if not client.bucket_exists(buckets["silver"]):
+        raise RuntimeError(f"Bucket {buckets['silver']} introuvable : vérifier MINIO_BUCKET_SILVER dans .env")
+    sent = 0
+    for path in paths:
+        key = f"citybikes-archive/{path.parent.name}/{path.name}"
+        try:
+            client.stat_object(buckets["silver"], key)
+            LOG.info("Déjà présent, ignoré : %s/%s", buckets["silver"], key)
+            continue
+        except Exception:
+            pass
+        client.fput_object(buckets["silver"], key, str(path), content_type="application/octet-stream")
+        LOG.info("Publié : %s/%s", buckets["silver"], key)
+        sent += 1
+    return sent
+
 
 def find_column(frame: pd.DataFrame, candidates: tuple[str, ...], required: bool = True) -> str | None:
     lowered = {str(column).lower(): column for column in frame.columns}
@@ -350,6 +378,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=ROOT / "data" / "citybikes-archive")
     parser.add_argument("--workers", type=int, default=2, help="téléchargements simultanés (défaut 2, soyez raisonnable)")
     parser.add_argument("--dry-run", action="store_true", help="affiche le plan et les volumes sans rien télécharger")
+    parser.add_argument("--upload-silver", action="store_true",
+                        help="publie les Silver horaires dans le bucket Silver (citybikes-archive/), sans écraser l'existant")
     parser.add_argument("--upload", action="store_true", help="publie aussi dans le bucket Bronze (clés citybikes-archive/)")
     parser.add_argument("--max-gb", type=float, default=2.0, help="refuse de publier si le volume dépasse cette taille (défaut 2 Go)")
     args = parser.parse_args(argv)
@@ -377,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
     print("Résultat :", counts, "| lignes totales :", f"{sum(r.get('rows', 0) for r in results):,}")
     silver_paths = transform_archive(args.output, results)
     print("Silver historique :", [str(path) for path in silver_paths])
+    if args.upload_silver:
+        print("Silver publiés :", publish_silver(silver_paths))
     if args.upload:
         print("Fichiers publiés :", publish(args.output, results))
     return 1 if counts["error"] or counts["invalid"] else 0
