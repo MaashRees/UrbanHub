@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import requests
 import yaml
 
@@ -229,7 +230,7 @@ def normalize_archive(frame: pd.DataFrame, network: str) -> pd.DataFrame:
     timestamp_column = find_column(frame, ("timestamp", "datetime", "date", "time", "last_updated"))
     station_column = find_column(frame, ("station_id", "station", "id", "uid"))
     bikes_column = find_column(frame, ("free_bikes", "bikes_available", "bikes"))
-    slots_column = find_column(frame, ("empty_slots", "free_slots", "slots"))
+    slots_column = find_column(frame, ("empty_slots", "free_slots", "free", "slots"))
     name_column = find_column(frame, ("station_name", "name"), required=False)
     latitude_column = find_column(frame, ("latitude", "lat"), required=False)
     longitude_column = find_column(frame, ("longitude", "lon", "lng"), required=False)
@@ -257,12 +258,17 @@ def to_hourly(frame: pd.DataFrame) -> pd.DataFrame:
     value_columns = ["station_name", "latitude", "longitude", "bikes_available", "free_slots"]
     outputs = []
     keys = ["city_id", "city_name", "network_id", "station_id"]
+    # L'archive n'écrit une ligne que lorsque l'état d'une station change : le forward-fill est donc exact
+    # tant que le collecteur tournait. Une heure sans aucun relevé sur tout le réseau est une panne de collecte :
+    # elle est écartée au lieu d'être remplie avec des valeurs inventées.
+    heures_observees = {reseau: set(g["observed_at_utc"].dt.floor("h").unique()) for reseau, g in frame.groupby("network_id")}
     for key_values, station in frame.groupby(keys, dropna=False):
         station = station.sort_values("observed_at_utc").set_index("observed_at_utc")
         hourly = station[value_columns].resample("1h").last().ffill()
         for key, value in zip(keys, key_values):
             hourly[key] = value
         hourly = hourly.reset_index().rename(columns={"observed_at_utc": "hour_utc"})
+        hourly = hourly[hourly["hour_utc"].isin(heures_observees[key_values[2]])].copy()
         hourly["observed_at_utc"] = hourly["hour_utc"]
         hourly["snapshot_minute_utc"] = hourly["hour_utc"].astype(str)
         outputs.append(hourly)
