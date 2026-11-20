@@ -31,11 +31,11 @@ def load_config():
     return cities_cfg
 
 def get_bucket_names(endpoint: str):
-    is_r2 = "r2.cloudflarestorage.com" in endpoint
+    # Mêmes noms en local et sur R2 : urbanhub-bronze, urbanhub-silver, urbanhub-gold.
     return {
-        "bronze": os.getenv("MINIO_BUCKET_BRONZE", "urbanhub-bronze" if is_r2 else "bronze"),
-        "silver": os.getenv("MINIO_BUCKET_SILVER", "urbanhub-silver" if is_r2 else "silver"),
-        "gold": os.getenv("MINIO_BUCKET_GOLD", "urbanhub-gold" if is_r2 else "gold"),
+        "bronze": os.getenv("MINIO_BUCKET_BRONZE", "urbanhub-bronze"),
+        "silver": os.getenv("MINIO_BUCKET_SILVER", "urbanhub-silver"),
+        "gold": os.getenv("MINIO_BUCKET_GOLD", "urbanhub-gold"),
     }
 
 def init_datalake_client():
@@ -56,13 +56,11 @@ def init_datalake_client():
     buckets = get_bucket_names(endpoint)
     for b_name in buckets.values():
         if not client.bucket_exists(b_name):
-            try:
+            if os.getenv("ALLOW_BUCKET_CREATION", "false").lower() == "true":
                 client.make_bucket(b_name)
                 print(f"Bucket '{b_name}' créé.")
-            except Exception as e:
-                print(f"Note bucket '{b_name}': {e}")
-        else:
-            pass
+            else:
+                raise RuntimeError(f"Bucket '{b_name}' introuvable : vérifier MINIO_BUCKET_* dans .env (création désactivée).")
             
     bronze_b = buckets["bronze"]
     try:
@@ -96,15 +94,15 @@ class OpenAQClient:
                     return resp.json()
                 elif resp.status_code == 429:
                     wait_time = int(resp.headers.get("x-ratelimit-reset", 2 ** attempt))
-                    print(f"⚠️ [OpenAQ 429] Rate limit atteint. Attente {wait_time}s...")
+                    print(f"[ATTENTION] [OpenAQ 429] Rate limit atteint. Attente {wait_time}s...")
                     time.sleep(max(1, wait_time))
                 elif resp.status_code >= 500:
                     time.sleep(1 + attempt)
                 else:
-                    print(f"❌ [OpenAQ {resp.status_code}] sur {url}: {resp.text[:120]}")
+                    print(f"[ERREUR] [OpenAQ {resp.status_code}] sur {url}: {resp.text[:120]}")
                     return None
             except requests.RequestException as e:
-                print(f"⚠️ [Erreur Réseau] {e} (tentative {attempt+1}/{max_retries})")
+                print(f"[ATTENTION] [Erreur Réseau] {e} (tentative {attempt+1}/{max_retries})")
                 time.sleep(1 + attempt)
         return None
 
@@ -191,6 +189,35 @@ def discover_city_sensors(aq_client: OpenAQClient, cities: list, radius_m: int =
 # 4. INGESTION EN ZONE BRONZE (JSON BRUT + PARTITIONNEMENT HIVE)
 # ==============================================================================
 
+def fetch_all_measurements(aq_client: OpenAQClient, sensor_id, params: dict, max_pages: int = 20):
+    """Lit toutes les pages de /sensors/{id}/measurements.
+
+    OpenAQ renvoie les mesures de la plus ancienne à la plus récente et plafonne chaque page
+    à `limit` lignes. Sans pagination, on ne garde que le début de la fenêtre et les mesures
+    les plus récentes sont perdues. On enchaîne donc les pages tant qu'une page est pleine.
+    La réponse renvoyée garde la forme d'une réponse unique (meta + results concaténés).
+    """
+    limit = params.get("limit", 300)
+    merged = None
+    pages = 0
+    for page in range(1, max_pages + 1):
+        res = aq_client.get(f"sensors/{sensor_id}/measurements", params={**params, "page": page})
+        if not res or not res.get("results"):
+            break
+        pages = page
+        if merged is None:
+            merged = res
+            merged["results"] = list(res["results"])
+        else:
+            merged["results"].extend(res["results"])
+        if len(res["results"]) < limit:
+            break
+        time.sleep(0.05)
+    if merged is not None:
+        merged.setdefault("meta", {})["pages_fetched"] = pages
+    return merged
+
+
 def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalog: list, max_sensors_per_pollutant: int = 2):
     now = datetime.now(timezone.utc)
     date_path = now.strftime("year=%Y/month=%m/day=%d")
@@ -201,8 +228,9 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
     selected_sensors = []
     by_city_pollutant = {}
     for entry in catalog:
-        is_recent = entry.get("datetime_last") and "2026" in str(entry["datetime_last"])
-        if not is_recent:
+        # Capteur actif : dernière mesure datée de moins de 30 jours (l'ancien test sur "2026" casserait en 2027).
+        last = pd.to_datetime(entry.get("datetime_last"), utc=True, errors="coerce")
+        if pd.isna(last) or last < pd.Timestamp(now) - pd.Timedelta(days=30):
             continue
         key = (entry["city_id"], entry["pollutant"])
         if key not in by_city_pollutant:
@@ -211,11 +239,17 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
             by_city_pollutant[key].append(entry)
             selected_sensors.append(entry)
             
-    print(f"📥 Début de l'ingestion Bronze pour {len(selected_sensors)} capteurs sélectionnés...")
+    print(f"Début de l'ingestion Bronze pour {len(selected_sensors)} capteurs sélectionnés...")
     ingested_keys = []
     
-    dt_from = (now - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z")
-    
+    # Premier remplissage : 14 jours. Exécution planifiée : OPENAQ_LOOKBACK_HOURS (ex. 12) limite la
+    # fenêtre relue, donc la taille des objets Bronze ; le dédoublonnage Silver absorbe le recouvrement.
+    lookback_hours = int(os.getenv("OPENAQ_LOOKBACK_HOURS", "0") or 0)
+    if lookback_hours > 0:
+        dt_from = (now - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:00:00Z")
+    else:
+        dt_from = (now - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z")
+
     for s in selected_sensors:
         sid = s["sensor_id"]
         cid = s["city_id"]
@@ -223,10 +257,10 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
             "datetime_from": dt_from,
             "limit": 300
         }
-        res = aq_client.get(f"sensors/{sid}/measurements", params=params)
+        res = fetch_all_measurements(aq_client, sid, params)
         if not res or not res.get("results"):
             continue
-            
+
         payload = {
             "sensor_metadata": s,
             "ingestion_utc": now.isoformat(),
@@ -254,8 +288,134 @@ def ingest_openaq_to_bronze(minio_client: Minio, aq_client: OpenAQClient, catalo
         ingested_keys.append(s3_path)
         time.sleep(0.05)
         
-    print(f"✅ Total Bronze : {len(ingested_keys)} objets sauvegardés dans {bronze_bucket}.")
+    print(f"[OK] Total Bronze : {len(ingested_keys)} objets sauvegardés dans {bronze_bucket}.")
     return ingested_keys
+
+def compare_openaq_archive_api(
+    aq_client: OpenAQClient,
+    catalog: list,
+    days: int = 3,
+    max_sensors_per_pollutant: int = 5,
+) -> pd.DataFrame:
+    """
+    Compare les mesures horaires de l'API OpenAQ aux fichiers journaliers
+    publics de l'archive AWS OpenAQ sur plusieurs capteurs.
+
+    Hypothese verifiee: la colonne datetime de l'archive correspond a la fin
+    de l'intervalle horaire. Elle est decalee d'une heure pour rejoindre
+    datetimeFrom utilise par la couche Silver.
+    """
+    selected = []
+    by_pollutant = {}
+    seen_locations = set()
+    for entry in catalog:
+        pollutant = entry.get("pollutant")
+        location_id = entry.get("location_id")
+        if not pollutant or not location_id:
+            continue
+        if (pollutant, location_id) in seen_locations:
+            continue
+        seen_locations.add((pollutant, location_id))
+        by_pollutant.setdefault(pollutant, [])
+        if len(by_pollutant[pollutant]) < max_sensors_per_pollutant:
+            by_pollutant[pollutant].append(entry)
+            selected.append(entry)
+
+    archive_end = datetime.now(timezone.utc).date() - timedelta(days=3)
+    archive_start = archive_end - timedelta(days=days - 1)
+    api_from = archive_start.strftime("%Y-%m-%dT00:00:00Z")
+    api_to = (archive_end + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+
+    comparison_rows = []
+    for entry in selected:
+        sensor_id = entry["sensor_id"]
+        location_id = entry["location_id"]
+        pollutant = entry["pollutant"]
+
+        api_data = aq_client.get(
+            f"sensors/{sensor_id}/hours",
+            params={
+                "datetime_from": api_from,
+                "datetime_to": api_to,
+                "limit": 100,
+                "page": 1,
+            },
+        )
+        api_by_timestamp = {}
+        if api_data:
+            for item in api_data.get("results", []):
+                period = item.get("period") or {}
+                dt_from = period.get("datetimeFrom") or {}
+                dt_str = dt_from.get("utc")
+                if dt_str and item.get("value") is not None:
+                    api_by_timestamp[pd.Timestamp(dt_str).floor("h")] = float(item["value"])
+
+        archive_by_timestamp = {}
+        current_date = archive_start
+        while current_date <= archive_end:
+            url = (
+                "https://openaq-data-archive.s3.amazonaws.com/"
+                f"records/csv.gz/locationid={location_id}/"
+                f"year={current_date.year}/month={current_date.month:02d}/"
+                f"location-{location_id}-{current_date.strftime('%Y%m%d')}.csv.gz"
+            )
+            try:
+                response = requests.get(url, timeout=30)
+                if response.status_code != 200:
+                    current_date += timedelta(days=1)
+                    continue
+                archive_df = pd.read_csv(io.BytesIO(response.content), compression="gzip")
+                sensor_column = "sensors_id" if "sensors_id" in archive_df.columns else "sensor_id"
+                if sensor_column not in archive_df.columns:
+                    current_date += timedelta(days=1)
+                    continue
+                archive_df = archive_df[
+                    (archive_df[sensor_column].astype(str) == str(sensor_id))
+                    & (archive_df["parameter"].str.lower() == pollutant)
+                ]
+                for row in archive_df.itertuples(index=False):
+                    archive_dt = pd.Timestamp(row.datetime)
+                    archive_from = archive_dt.tz_convert("UTC").floor("h") - timedelta(hours=1)
+                    archive_by_timestamp[archive_from] = float(row.value)
+            except (requests.RequestException, pd.errors.ParserError, OSError, ValueError):
+                pass
+            current_date += timedelta(days=1)
+
+        common_timestamps = sorted(set(api_by_timestamp) & set(archive_by_timestamp))
+        for timestamp in common_timestamps:
+            api_value = api_by_timestamp[timestamp]
+            archive_value = archive_by_timestamp[timestamp]
+            comparison_rows.append({
+                "sensor_id": str(sensor_id),
+                "location_id": str(location_id),
+                "location_name": entry.get("location_name"),
+                "city_id": entry.get("city_id"),
+                "pollutant": pollutant,
+                "timestamp_utc": timestamp,
+                "api_value": api_value,
+                "archive_value": archive_value,
+                "difference_archive_minus_api": archive_value - api_value,
+                "absolute_difference": abs(archive_value - api_value),
+            })
+
+    if not comparison_rows:
+        print("⚠️ Aucun horaire commun trouvé entre l'API et l'archive sur la période.")
+        return pd.DataFrame()
+
+    comparison = pd.DataFrame(comparison_rows)
+    print(
+        f"📊 Comparaison API/archive : {len(comparison)} heures communes "
+        f"sur {comparison['sensor_id'].nunique()} capteurs."
+    )
+    print(
+        comparison.groupby("pollutant").agg(
+            capteurs=("sensor_id", "nunique"),
+            heures_communes=("timestamp_utc", "count"),
+            mae=("absolute_difference", "mean"),
+            biais_archive_minus_api=("difference_archive_minus_api", "mean"),
+        ).round(3)
+    )
+    return comparison
 
 # ==============================================================================
 # 5. NETTOYAGE & TRANSFORMATION VERS SILVER (PARQUET, CONVERSION UNITÉS)
@@ -281,25 +441,51 @@ def clean_and_transform_to_silver(minio_client: Minio):
     buckets = get_bucket_names(endpoint)
     bronze_bucket = buckets["bronze"]
     silver_bucket = buckets["silver"]
-    
-    objects = list(minio_client.list_objects(bronze_bucket, prefix="openaq/", recursive=True))
-    if not objects:
-        print(f"⚠️ Aucun objet trouvé dans {bronze_bucket}/openaq/")
-        # Si Silver existe déjà, charger la table existante
-        try:
-            resp = minio_client.get_object(silver_bucket, "pollution/pollution_france.parquet")
-            df = pd.read_parquet(io.BytesIO(resp.read()))
-            resp.close()
-            resp.release_conn()
-            print(f"ℹ️ Relecture de la table existante {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
-            return df
-        except Exception:
-            return None
-        
+
+    silver_path = "pollution/pollution_france.parquet"
+    marker_path = "processing/openaq/silver_processed.json"
+    existing_df = None
+    processed_objects = set()
+
+    try:
+        resp = minio_client.get_object(silver_bucket, silver_path)
+        existing_df = pd.read_parquet(io.BytesIO(resp.read()))
+        resp.close()
+        resp.release_conn()
+    except Exception:
+        existing_df = None
+
+    try:
+        resp = minio_client.get_object(bronze_bucket, marker_path)
+        marker = json.loads(resp.read().decode("utf-8"))
+        resp.close()
+        resp.release_conn()
+        processed_objects = set(marker.get("processed_objects", []))
+    except Exception:
+        # Premier lancement: aucun marker, on traite tout le Bronze.
+        processed_objects = set()
+
+    all_objects = list(minio_client.list_objects(bronze_bucket, prefix="openaq/", recursive=True))
+    new_objects = [obj for obj in all_objects if obj.object_name not in processed_objects]
+    if not new_objects:
+        if existing_df is not None:
+            print(
+                f"ℹ️ Aucun nouvel objet Bronze. Silver relue depuis "
+                f"{silver_bucket}/{silver_path} ({len(existing_df)} lignes)."
+            )
+            return existing_df
+        print(f"⚠️ Aucun objet Bronze trouvé dans {bronze_bucket}/openaq/")
+        return None
+
+    print(
+        f"♻️ Silver incrémental : {len(new_objects)} nouvel/ nouveaux objet(s) "
+        f"sur {len(all_objects)} objet(s) Bronze."
+    )
+
     records = []
     treatment_timestamp = datetime.now(timezone.utc).isoformat()
-    
-    for obj in objects:
+
+    for obj in new_objects:
         resp = minio_client.get_object(bronze_bucket, obj.object_name)
         data = json.loads(resp.read().decode("utf-8"))
         resp.close()
@@ -360,14 +546,22 @@ def clean_and_transform_to_silver(minio_client: Minio):
             
     if not records:
         print("⚠️ Aucun enregistrement valide extrait de Bronze.")
+        if existing_df is not None:
+            return existing_df
         return None
         
     df = pd.DataFrame(records)
     df["timestamp_utc"] = pd.to_datetime(df["timestamp_utc"], utc=True)
+
+    if existing_df is not None:
+        df = pd.concat([existing_df, df], ignore_index=True)
     initial_len = len(df)
-    df = df.drop_duplicates(subset=["sensor_id", "timestamp_utc"]).reset_index(drop=True)
+    df = df.drop_duplicates(
+        subset=["sensor_id", "timestamp_utc"],
+        keep="last",
+    ).reset_index(drop=True)
     duplicates_removed = initial_len - len(df)
-    print(f"🧹 Déduplication : {duplicates_removed} doublons supprimés sur {initial_len} lignes.")
+    print(f"Déduplication : {duplicates_removed} doublons supprimés sur {initial_len} lignes.")
     
     # Sauvegarde Parquet dans Silver
     now = datetime.now(timezone.utc)
@@ -394,7 +588,7 @@ def clean_and_transform_to_silver(minio_client: Minio):
                 "auteur": "personne_3_julie"
             }
         )
-    print(f"💾 Silver sauvegardé : {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
+    print(f"Silver sauvegardé : {silver_bucket}/pollution/pollution_france.parquet ({len(df)} lignes)")
     return df
 
 # ==============================================================================
@@ -438,7 +632,7 @@ def compute_gold_pollution(minio_client: Minio, df_silver: pd.DataFrame):
         content_type="application/x-parquet",
         metadata={"source": "silver/pollution", "auteur": "personne_3_julie"}
     )
-    print(f"🏆 Gold sauvegardé : {gold_bucket}/kpis/pollution_hourly.parquet ({len(hourly)} lignes)")
+    print(f"Gold sauvegardé : {gold_bucket}/kpis/pollution_hourly.parquet ({len(hourly)} lignes)")
     
     # 2. Indicateurs métier
     zones_ranking = df.groupby(["city_name", "location_name", "pollutant", "unit"]).agg(
@@ -499,7 +693,7 @@ def compute_gold_pollution(minio_client: Minio, df_silver: pd.DataFrame):
         length=len(summary_bytes),
         content_type="application/json"
     )
-    print(f"🏆 Résumé JSON sauvegardé : {gold_bucket}/kpis/pollution_summary.json")
+    print(f"Résumé JSON sauvegardé : {gold_bucket}/kpis/pollution_summary.json")
     return hourly, zones_ranking, diurnal_profile, df_dominance, anomalies
 
 # ==============================================================================
@@ -507,24 +701,28 @@ def compute_gold_pollution(minio_client: Minio, df_silver: pd.DataFrame):
 # ==============================================================================
 
 def harmonize_mobility_kpis(minio_client: Minio, gold_bucket: str):
-    """Garantit que les tables mobilité existent sous kpis/ et citybikes/kpis/."""
+    """Recopie les tables mobilité de citybikes/kpis/ (chemin canonique, écrit par le collecteur) vers kpis/.
+
+    La copie est rafraîchie à chaque exécution : auparavant elle n'était créée qu'une fois et
+    restait périmée, ce qui faussait city_hourly après toute reconstruction du Gold mobilité.
+    """
     pairs = [
         ("citybikes/kpis/mobility_hourly.parquet", "kpis/mobility_hourly.parquet"),
         ("citybikes/kpis/mobility_station_latest.parquet", "kpis/mobility_station_latest.parquet")
     ]
     for src, dst in pairs:
         try:
-            minio_client.stat_object(gold_bucket, dst)
+            resp = minio_client.get_object(gold_bucket, src)
+            data = resp.read()
+            resp.close()
+            resp.release_conn()
         except Exception:
-            try:
-                resp = minio_client.get_object(gold_bucket, src)
-                data = resp.read()
-                resp.close()
-                resp.release_conn()
-                minio_client.put_object(gold_bucket, dst, io.BytesIO(data), len(data), content_type="application/x-parquet")
-                print(f"  ✨ Harmonisé {src} ➔ {dst}")
-            except Exception:
-                pass
+            continue  # pas de Gold mobilité canonique : on ne touche pas à la copie existante
+        try:
+            minio_client.put_object(gold_bucket, dst, io.BytesIO(data), len(data), content_type="application/x-parquet")
+            print(f"  Copie mise à jour {src} ➔ {dst}")
+        except Exception as error:
+            print(f"  [ATTENTION] Copie impossible {src} ➔ {dst} : {error}")
 
 def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.DataFrame):
     """
@@ -534,7 +732,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
     endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
     gold_bucket = get_bucket_names(endpoint)["gold"]
     
-    print("\n🔍 Contrôle et fusion multi-sources pour l'analyse croisée :")
+    print("\nContrôle et fusion multi-sources pour l'analyse croisée :")
     harmonize_mobility_kpis(minio_client, gold_bucket)
     
     # 1. Vérification météo (P1) : Open-Meteo au chemin Gold officiel.
@@ -546,30 +744,30 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
             resp.close()
             resp.release_conn()
             weather_source = df_w["source"].iloc[0] if not df_w.empty and "source" in df_w else "NOAA ISD"
-            print(f"  - Source 1 Météo ({weather_source}) : 🟢 Disponible ({w_key}, {len(df_w)} lignes)")
+            print(f"  - Source 1 Météo ({weather_source}) : Disponible ({w_key}, {len(df_w)} lignes)")
             break
         except Exception:
             continue
     if df_w.empty:
-        print("  - Source 1 Météo (Personne 1) : 🔴 ABSENTE")
+        print("  - Source 1 Météo (Personne 1) : ABSENTE")
         
     # 2. Vérification Mobilité CityBikes (P2)
     df_m = pd.DataFrame()
-    for m_key in ["kpis/mobility_hourly.parquet", "citybikes/kpis/mobility_hourly.parquet"]:
+    for m_key in ["citybikes/kpis/mobility_hourly.parquet", "kpis/mobility_hourly.parquet"]:
         try:
             resp = minio_client.get_object(gold_bucket, m_key)
             df_m = pd.read_parquet(io.BytesIO(resp.read()))
             resp.close()
             resp.release_conn()
-            print(f"  - Source 2 Mobilité CityBikes (Personne 2) : 🟢 Disponible ({m_key}, {len(df_m)} lignes)")
+            print(f"  - Source 2 Mobilité CityBikes (Personne 2) : Disponible ({m_key}, {len(df_m)} lignes)")
             break
         except Exception:
             continue
     if df_m.empty:
-        print("  - Source 2 Mobilité CityBikes (Personne 2) : 🔴 ABSENTE")
+        print("  - Source 2 Mobilité CityBikes (Personne 2) : ABSENTE")
         
     # 3. Source 3 Pollution OpenAQ (P3)
-    print(f"  - Source 3 Pollution OpenAQ (Personne 3) : 🟢 Disponible ({len(df_pollution_hourly)} lignes)")
+    print(f"  - Source 3 Pollution OpenAQ (Personne 3) : Disponible ({len(df_pollution_hourly)} lignes)")
     
     # Pivot de la pollution par polluant
     p_pivot = df_pollution_hourly.pivot_table(
@@ -581,11 +779,12 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
     p_pivot = p_pivot.rename(columns={col: f"pollution_{col}_ugm3" for col in pollutant_cols})
     
     # Préparation météo
-    w_cols = ["city_id", "hour_utc", "temperature", "wind_speed", "precipitation", "visibility", "pressure"]
+    w_cols = ["city_id", "hour_utc", "temperature", "wind_speed", "wind_direction", "precipitation", "visibility", "pressure"]
     w_sub = df_w[[c for c in w_cols if c in df_w.columns]].copy() if not df_w.empty else pd.DataFrame(columns=["city_id", "hour_utc"])
     w_sub = w_sub.rename(columns={
         "temperature": "weather_temperature_c",
         "wind_speed": "weather_wind_speed_ms",
+        "wind_direction": "weather_wind_direction_deg",
         "precipitation": "weather_precipitation_mm",
         "visibility": "weather_visibility_m",
         "pressure": "weather_pressure_hpa"
@@ -651,7 +850,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
             "lignes": str(len(city_hourly))
         }
     )
-    print(f"🏆 Table Gold multi-sources sauvegardée : {gold_bucket}/kpis/city_hourly.parquet ({len(city_hourly)} lignes)")
+    print(f"Table Gold multi-sources sauvegardée : {gold_bucket}/kpis/city_hourly.parquet ({len(city_hourly)} lignes)")
     
     # Rapport de diagnostic
     status_report = {
@@ -691,7 +890,7 @@ def check_and_build_cross_analysis(minio_client: Minio, df_pollution_hourly: pd.
         length=len(diag_bytes),
         content_type="application/json"
     )
-    print(f"📋 Diagnostic de couverture mis à jour : {gold_bucket}/kpis/diagnostic_couverture_croisee.json")
+    print(f"Diagnostic de couverture mis à jour : {gold_bucket}/kpis/diagnostic_couverture_croisee.json")
     return status_report, city_hourly
 
 # ==============================================================================
@@ -719,9 +918,9 @@ def run_pipeline():
         
         print("\n=== ÉTAPE 5 : Analyse Croisée & Fusion Multi-sources ===")
         diag, city_hourly = check_and_build_cross_analysis(minio_client, hourly)
-        print("\n🎉 Pipeline OpenAQ exécuté avec succès.")
+        print("\nPipeline OpenAQ exécuté avec succès.")
     else:
-        print("❌ Aucune donnée Silver générée.")
+        print("[ERREUR] Aucune donnée Silver générée.")
 
 if __name__ == "__main__":
     run_pipeline()
