@@ -33,7 +33,7 @@ Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
 
 **Mesures pour rester sous 10 Go :**
 1. Compresser le Bronze CityBikes en gzip (divise le volume par 5).
-2. Arrêter la collecte en direct après les vidéos et la date de rendu, ou la limiter à 10 jours.
+2. **Arrêter la collecte en direct après les vidéos** (décidé). Les données déjà collectées restent dans R2.
 3. Pour l'archive CityBikes, ne garder dans R2 que ce qui sert : 2025 seul, et conserver le Bronze brut en local (il se retélécharge depuis la source publique).
 4. Supprimer l'ancien NOAA (`silver/weather/` 78 Mo) et les préfixes `sample/` (12 Mo) quand tout est validé.
 
@@ -53,7 +53,7 @@ Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
 | Qui | Tâche | Taille |
 | :--- | :--- | :--- |
 | **Conambot** | Transformer l'archive CityBikes en séries horaires par ville (et par station pour 2025) au même format que le Silver en direct, après lecture du schéma réel (notebook 06) | moyenne |
-| **Conambot** | Compresser en gzip le Bronze CityBikes dans `collect_once` (`write_bronze`) | petite, environ 10 lignes |
+| **Conambot** | Compresser en gzip le Bronze CityBikes dans `collect_once` (`write_bronze`) : optionnel puisque la collecte s'arrête après les vidéos (environ 350 Mo par jour d'ici là) | petite, environ 10 lignes |
 | **Conambot** | Étendre le notebook 04 avec l'historique (pics journaliers, stations critiques sur un an) | moyenne |
 | **Julie** | Retenir plus de capteurs par polluant (`max_sensors_per_pollutant`) et valider l'archive OpenAQ contre l'API sur 2 ou 3 jours | petite |
 | **Julie** | Rendre le Silver OpenAQ incrémental (il relit tout le Bronze à chaque exécution) | moyenne |
@@ -66,7 +66,7 @@ Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
 
 ## <img src="assets/icons/list.svg" width="18" height="18" alt=""> Décisions à prendre
 
-1. Quelle machine fait tourner la collecte (une seule), et jusqu'à quelle date.
+1. **Décidé : la collecte en direct est coupée après l'enregistrement des vidéos** (`docker compose --profile collect stop`). Reste à fixer la machine, une seule, qui la fait tourner d'ici là, et à désactiver la mise en veille du PC.
 2. Télécharger l'archive CityBikes en entier (946 Mo) ou 2025 seul (640 Mo).
 3. Publier dans R2 le Bronze de l'archive CityBikes, ou le garder en local.
 
@@ -79,14 +79,14 @@ Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
 
 **À tout le monde**
 
-> Salut, point d'étape. Les archives sur 5 ans (2022 à 2026) sont écrites : météo avec visibilité, pollution OpenAQ, et le plan CityBikes. Stockage R2 : 0,17 Go sur 10, mais la collecte CityBikes en direct ajoute environ 350 Mo par jour, donc 10 Go en 4 semaines. On compresse le Bronze et on arrête la collecte après les vidéos. Voici la répartition pour après les vidéos, chacun sur sa branche, jamais sur `main`. Détail dans `docs/RESTE_A_FAIRE.md`.
+> Salut, point d'étape. Les archives sur 5 ans (2022 à 2026) sont écrites : météo avec visibilité, pollution OpenAQ, et le plan CityBikes. Les tables historiques seront dans R2 : ne retéléchargez pas les archives, faites `git pull --rebase` puis `uv sync`. Stockage R2 : 0,17 Go sur 10 ; la collecte CityBikes en direct ajoute environ 350 Mo par jour, on l'arrête après les vidéos. Voici la répartition pour après les vidéos, chacun sur sa branche, jamais sur `main`. Détail dans `docs/RESTE_A_FAIRE.md`.
 
 **À Conambot**
 
-> 1) Quand j'aurai téléchargé l'archive CityBikes, peux-tu la transformer en séries horaires par ville (et par station pour 2025) dans le même format que le Silver en direct ? Le notebook 06 affiche le schéma.
-> 2) Peux-tu compresser en gzip le Bronze dans `write_bronze` ? Je mesure un facteur 5 : de 294 à 56 Mo par jour.
-> 3) Étends le notebook 04 avec l'historique.
-> 4) Qui lance la collecte, et jusqu'à quelle date ?
+> 1) Peux-tu transformer l'archive CityBikes en séries horaires par ville (et par station pour 2025) dans le même format que le Silver en direct ? Pour lire le schéma sans tout télécharger : `python scripts/citybikes_archive.py --years 2025 --networks vlille` (40 Mo, un seul réseau). Une seule personne télécharge l'archive complète.
+> 2) Étends le notebook 04 avec l'historique.
+> 3) La collecte en direct sera coupée après les vidéos. Qui la fait tourner d'ici là ? Une seule machine, sans mise en veille.
+> 4) Optionnel : compresser en gzip le Bronze dans `write_bronze` (facteur 5 mesuré), utile seulement si la collecte dure.
 
 **À Julie**
 
