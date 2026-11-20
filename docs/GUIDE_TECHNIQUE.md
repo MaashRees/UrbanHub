@@ -1,11 +1,11 @@
-# 📘 Guide Technique & Recettes d'Architecture — UrbanHub
+# <img src="assets/icons/book-open.svg" width="18" height="18" alt=""> Guide Technique & Recettes d'Architecture - UrbanHub
 
 > **Objectif :** Ce guide capitalise sur l'ensemble des concepts, codes et retours d'expérience validés dans le cadre des travaux pratiques du cours `Archi_data_lake` ([notes.md](../notes.md), [tp_datalake_partitionnement.ipynb](../tp_datalake_partitionnement.ipynb), [tp_datalake_sinistres.ipynb](../tp_datalake_sinistres.ipynb)).  
 > Il fournit les **recettes prêtes à l'emploi** pour implémenter chaque étape du jumeau numérique urbain **UrbanHub**.
 
 ---
 
-## 📑 Sommaire
+## <img src="assets/icons/list.svg" width="18" height="18" alt=""> Sommaire
 1. [Cartographie des Acquis & Références du Dépôt](#1-cartographie-des-acquis--références-du-dépôt)
 2. [Structure des Buckets & Partitionnement Hive](#2-structure-des-buckets--partitionnement-hive)
 3. [Recettes de Code Clés en Main](#3-recettes-de-code-clés-en-main)
@@ -40,17 +40,17 @@ Pour concevoir UrbanHub, nous réutilisons directement les briques éprouvées d
 
 Dans UrbanHub, nous appliquons une convention de nommage stricte inspirée du standard Hive :
 
-### 🥉 Bucket `bronze` (Données brutes, append-only, versioning activé)
+### <img src="assets/icons/layers-bronze.svg" width="18" height="18" alt=""> Bucket `bronze` (Données brutes, append-only, versioning activé)
 - **Météo NOAA :** `noaa/year=YYYY/station_id=<USAF_WBAN>.csv`
 - **Mobilité CityBikes :** `citybikes/network=<network_id>/year=YYYY/month=MM/day=DD/snapshot_<HHMMSS>.json`
 - **Pollution OpenAQ :** `openaq/city=<city_id>/year=YYYY/month=MM/day=DD/measurements_<HHMMSS>.json`
 
-### 🥈 Bucket `silver` (Données nettoyées, typées, dédupliquées en Parquet)
+### <img src="assets/icons/layers-silver.svg" width="18" height="18" alt=""> Bucket `silver` (Données nettoyées, typées, dédupliquées en Parquet)
 - `weather/year=YYYY/weather_france.parquet`
 - `mobility/year=YYYY/month=MM/mobility_stations.parquet`
 - `pollution/year=YYYY/month=MM/pollution_sensors.parquet`
 
-### 🥇 Bucket `gold` (Agrégats métier & tables croisées)
+### <img src="assets/icons/layers-gold.svg" width="18" height="18" alt=""> Bucket `gold` (Agrégats métier & tables croisées)
 - `kpis/weather_daily.parquet`
 - `kpis/mobility_station_latest.parquet` et `kpis/mobility_hourly.parquet`
 - `kpis/pollution_hourly.parquet`
@@ -139,7 +139,7 @@ def fetch_all_noaa_parallel(client, station_list, years, max_workers=8):
 ---
 
 ### 3.3 Ingestion Micro-batch CityBikes (Streaming)
-Collecte toutes les 2 à 3 minutes pour les réseaux configurés dans [config/cities.yml](../config/cities.yml) (ex: `velib-metropole`, `velo-v`, `vlille`).
+Collecte toutes les 5 minutes pour les réseaux configurés dans [config/cities.yml](../config/cities.yml) (ex: `velib-metropole`, `velo-v`, `vlille`).
 
 ```python
 import io
@@ -174,7 +174,7 @@ def capture_citybikes_snapshot(client, network_id="velib-metropole"):
             "stations_count": str(len(data.get("network", {}).get("stations", [])))
         }
     )
-    print(f"✅ Instantané CityBikes sauvegardé : bronze/{s3_path}")
+    print(f"[OK] Instantané CityBikes sauvegardé : bronze/{s3_path}")
 ```
 
 ---
@@ -216,7 +216,7 @@ def fetch_openaq_measurements(client, location_id, city_name="Paris"):
         content_type="application/json",
         metadata={"city": city_name, "location_id": str(location_id)}
     )
-    print(f"✅ Mesures OpenAQ archivées : bronze/{s3_path}")
+    print(f"[OK] Mesures OpenAQ archivées : bronze/{s3_path}")
 ```
 
 ---
@@ -254,7 +254,7 @@ def upload_dataframe_to_silver_parquet(client, df, s3_object_path, author="data_
             "lignes": str(len(df_clean))
         }
     )
-    print(f"💾 Écrit dans silver/{s3_object_path} ({len(parquet_bytes)} octets, {len(df_clean)} lignes)")
+    print(f"Écrit dans silver/{s3_object_path} ({len(parquet_bytes)} octets, {len(df_clean)} lignes)")
 
 def read_silver_parquet(client, s3_object_path):
     """Lit un fichier Parquet depuis Silver directement en DataFrame."""
@@ -317,7 +317,7 @@ def build_city_hourly_gold(client, df_weather, df_mobility, df_pollution):
         length=len(parquet_buffer.getvalue()),
         content_type="application/x-parquet"
     )
-    print("🏆 Table Gold multi-sources 'city_hourly.parquet' générée avec succès.")
+    print("Table Gold multi-sources 'city_hourly.parquet' générée avec succès.")
     return city_hourly
 ```
 
@@ -342,7 +342,7 @@ def generate_report_presigned_url(client, object_name="kpis/summary_dashboard.js
     return url
 
 url = generate_report_presigned_url(client)
-print("🔗 Lien sécurisé temporaire (2h) :", url)
+print("Lien sécurisé temporaire (2h) :", url)
 ```
 
 ---

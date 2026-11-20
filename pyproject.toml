@@ -1,0 +1,38 @@
+[project]
+name = "urbanhub"
+version = "0.1.0"
+description = "Plateforme Data Lake Smart City : batch météo, streaming CityBikes, IoT OpenAQ"
+readme = "README.md"
+authors = [
+    { name = "WilFriite", email = "jnguessan2003@gmail.com" }
+]
+requires-python = ">=3.11"
+# Mêmes dépendances que requirements.txt (utilisé par le Dockerfile). Les garder alignées.
+dependencies = [
+    # Données et Data Lake
+    "pandas>=3.1.1",
+    "pyarrow>=26.0.1",
+    "numpy>=2.0",
+    "duckdb>=1.0.0",
+    "minio>=7.2.20",
+    "boto3>=1.34.0",
+    "scipy>=1.12.0",
+    # Collecte et configuration
+    "requests>=2.31.0",
+    "urllib3>=2.0.0",
+    "pyyaml>=6.0.1",
+    "python-dotenv>=1.0.0",
+    # Notebooks, visualisation et dashboard
+    "jupyter>=1.1.1",
+    "notebook>=7.0.0",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    "folium>=0.15.0",
+    "ipywidgets>=8.1.0",
+    "voila>=0.5.0",
+]
+
+# UrbanHub est un projet de scripts et de notebooks, pas un paquet installable :
+# sans cette ligne, `uv sync` et `uv run` échouent (aucun module src/urbanhub).
+[tool.uv]
+package = false
