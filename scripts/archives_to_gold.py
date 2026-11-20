@@ -14,12 +14,12 @@ Sorties dans data/archives-gold/ (rien n'est publié sans --upload) :
 Règles : tout en UTC ; la pollution d'une heure est la moyenne des capteurs de la ville (comme le
 pollution_hourly en direct). Horodatage OpenAQ : l'archive donne la FIN de la période d'une heure,
 le Silver en direct le DÉBUT ; vérifié le 20/11/2026 en comparant avec l'API (capteur 7941 : valeur 36,0
-à 01:00+01:00 dans l'archive = période 23:00 à 00:00 UTC dans l'API). Le décalage par défaut est donc
-de -1 heure (--openaq-shift-hours).
+à 01:00+01:00 dans l'archive = période 23:00 à 00:00 UTC dans l'API). Le décalage de -1 heure est appliqué
+une seule fois, à la conversion Silver (scripts/openaq_archive.py, --shift-hours -1 par défaut) : le Silver
+est donc déjà au début de période, et --openaq-shift-hours vaut 0 ici.
 
 Exemples :
     python scripts/archives_to_gold.py
-    python scripts/archives_to_gold.py --openaq-shift-hours 0   # sans décalage (non recommandé)
     python scripts/archives_to_gold.py --upload          # publie dans le bucket Gold (kpis/history/ et kpis/pollution_monthly.parquet)
 """
 
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--weather", type=Path, default=ROOT / "data" / "openmeteo-archive" / "gold" / "weather_hourly_visibility.parquet")
     parser.add_argument("--openaq-root", type=Path, default=ROOT / "data" / "openaq-archive")
     parser.add_argument("--output", type=Path, default=ROOT / "data" / "archives-gold")
-    parser.add_argument("--openaq-shift-hours", type=float, default=-1.0, help="décalage de l'horodatage OpenAQ : -1 ramène la fin de période de l'archive au début de période du Silver en direct")
+    parser.add_argument("--openaq-shift-hours", type=float, default=0.0, help="décalage de l'horodatage OpenAQ : -1 ramène la fin de période de l'archive au début de période du Silver en direct")
     parser.add_argument("--upload", action="store_true", help="publie dans le bucket Gold")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
