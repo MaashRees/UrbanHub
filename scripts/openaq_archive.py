@@ -290,12 +290,14 @@ def publish(root: Path, results: list[dict[str, Any]], silver: dict[int, Path]) 
     client, buckets = build_minio_client()
     ensure_bucket(client, buckets["bronze"])
     ensure_bucket(client, buckets["silver"])
-    sent = 0
-    for item in results:
-        if item["status"] in {"downloaded", "cached"}:
-            client.fput_object(buckets["bronze"], f"openaq-archive/{item['key']}", str(local_path(root, item)),
-                               content_type="application/gzip")
-            sent += 1
+    def send(item: dict[str, Any]) -> int:
+        client.fput_object(buckets["bronze"], f"openaq-archive/{item['key']}", str(local_path(root, item)),
+                           content_type="application/gzip")
+        return 1
+
+    # 21 000 petits objets : envoi en parallèle (le client MinIO est sûr pour les threads)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        sent = sum(pool.map(send, [i for i in results if i["status"] in {"downloaded", "cached"}]))
     for year, path in silver.items():
         client.fput_object(buckets["silver"], f"pollution-archive/year={year}/pollution_archive.parquet", str(path),
                            content_type="application/x-parquet")
@@ -312,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--dry-run", action="store_true", help="plan et volumes seulement, aucun téléchargement")
     parser.add_argument("--silver", action="store_true", help="convertit les fichiers téléchargés en tables Silver annuelles")
-    parser.add_argument("--shift-hours", type=float, default=0.0, help="décalage appliqué à l'horodatage ; l'archive donne la FIN de période, -1 donne le début comme le Silver en direct (la transformation scripts/archives_to_gold.py l'applique par défaut)")
+    parser.add_argument("--shift-hours", type=float, default=-1.0, help="décalage appliqué à l'horodatage ; l'archive donne la FIN de période, -1 donne le début comme le Silver en direct (la transformation scripts/archives_to_gold.py l'applique par défaut)")
     parser.add_argument("--upload", action="store_true", help="publie Bronze (openaq-archive/) et Silver (pollution-archive/)")
     parser.add_argument("--max-files", type=int, default=30000, help="refuse de télécharger au-delà de ce nombre de fichiers")
     parser.add_argument("--max-gb", type=float, default=1.0, help="refuse de publier au-delà de ce volume")
