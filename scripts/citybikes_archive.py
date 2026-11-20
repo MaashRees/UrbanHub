@@ -204,6 +204,95 @@ def publish(root: Path, results: list[dict[str, Any]]) -> int:
     return sent
 
 
+
+def find_column(frame: pd.DataFrame, candidates: tuple[str, ...], required: bool = True) -> str | None:
+    lowered = {str(column).lower(): column for column in frame.columns}
+    for candidate in candidates:
+        if candidate.lower() in lowered:
+            return lowered[candidate.lower()]
+    if required:
+        raise ValueError(f"Colonne absente. Candidates={candidates}; colonnes={list(frame.columns)}")
+    return None
+
+
+def parse_timestamp(values: pd.Series) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    if numeric.notna().mean() > 0.8 and numeric.notna().any():
+        magnitude = numeric.dropna().abs().median()
+        unit = "s" if magnitude < 1e11 else "ms" if magnitude < 1e14 else "us" if magnitude < 1e17 else "ns"
+        return pd.to_datetime(numeric, unit=unit, utc=True, errors="coerce")
+    return pd.to_datetime(values, utc=True, errors="coerce")
+
+
+def normalize_archive(frame: pd.DataFrame, network: str) -> pd.DataFrame:
+    """Mappe le schéma réel de l'archive vers le contrat Silver direct."""
+    timestamp_column = find_column(frame, ("timestamp", "datetime", "date", "time", "last_updated"))
+    station_column = find_column(frame, ("station_id", "station", "id", "uid"))
+    bikes_column = find_column(frame, ("free_bikes", "bikes_available", "bikes"))
+    slots_column = find_column(frame, ("empty_slots", "free_slots", "slots"))
+    name_column = find_column(frame, ("station_name", "name"), required=False)
+    latitude_column = find_column(frame, ("latitude", "lat"), required=False)
+    longitude_column = find_column(frame, ("longitude", "lon", "lng"), required=False)
+    data = pd.DataFrame({
+        "network_id": network,
+        "station_id": frame[station_column].astype(str),
+        "station_name": frame[name_column] if name_column else pd.NA,
+        "latitude": frame[latitude_column] if latitude_column else pd.NA,
+        "longitude": frame[longitude_column] if longitude_column else pd.NA,
+        "bikes_available": pd.to_numeric(frame[bikes_column], errors="coerce"),
+        "free_slots": pd.to_numeric(frame[slots_column], errors="coerce"),
+        "observed_at_utc": parse_timestamp(frame[timestamp_column]),
+    })
+    data = data.dropna(subset=["station_id", "observed_at_utc"])
+    data["snapshot_minute_utc"] = data["observed_at_utc"].dt.floor("min").astype(str)
+    data["city_id"] = data["network_id"].map({"velib": "paris", "velov": "lyon", "vlille": "lille"}).fillna(data["network_id"])
+    data["city_name"] = data["city_id"].map({"paris": "Paris", "lyon": "Lyon", "lille": "Lille"})
+    return data.sort_values(["station_id", "observed_at_utc"]).drop_duplicates(
+        ["network_id", "station_id", "observed_at_utc"], keep="last"
+    )
+
+
+def to_hourly(frame: pd.DataFrame) -> pd.DataFrame:
+    """Produit un état horaire par station via dernier état connu puis forward-fill."""
+    value_columns = ["station_name", "latitude", "longitude", "bikes_available", "free_slots"]
+    outputs = []
+    keys = ["city_id", "city_name", "network_id", "station_id"]
+    for key_values, station in frame.groupby(keys, dropna=False):
+        station = station.sort_values("observed_at_utc").set_index("observed_at_utc")
+        hourly = station[value_columns].resample("1h").last().ffill()
+        for key, value in zip(keys, key_values):
+            hourly[key] = value
+        hourly = hourly.reset_index().rename(columns={"observed_at_utc": "hour_utc"})
+        hourly["observed_at_utc"] = hourly["hour_utc"]
+        hourly["snapshot_minute_utc"] = hourly["hour_utc"].astype(str)
+        outputs.append(hourly)
+    if not outputs:
+        return pd.DataFrame()
+    columns = ["city_id", "city_name", "network_id", "station_id", "station_name", "latitude", "longitude",
+               "bikes_available", "free_slots", "observed_at_utc", "snapshot_minute_utc", "hour_utc"]
+    return pd.concat(outputs, ignore_index=True)[columns].sort_values(["city_id", "station_id", "hour_utc"])
+
+
+def transform_archive(root: Path, results: list[dict[str, Any]]) -> list[Path]:
+    """Transforme les Parquet bruts valides en une Silver horaire par année."""
+    files = [local_path(root, item) for item in results if item["status"] in {"downloaded", "cached"}]
+    outputs = []
+    for year in sorted({int(path.parent.name) for path in files}):
+        frames = []
+        for path in files:
+            if int(path.parent.name) != year:
+                continue
+            network = path.name.split("-", 2)[1]
+            LOG.info("Lecture du schéma réel : %s", path)
+            frames.append(normalize_archive(pd.read_parquet(path), network))
+        hourly = to_hourly(pd.concat(frames, ignore_index=True))
+        destination = root / "silver" / f"year={year}" / "citybikes_stations_hourly.parquet"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        hourly.to_parquet(destination, index=False, engine="pyarrow", compression="snappy")
+        outputs.append(destination)
+        LOG.info("Silver historique %s : %d lignes", destination, len(hourly))
+    return outputs
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--years", type=int, nargs="+", help="années (défaut : les 5 dernières jusqu'à 2026)")
@@ -236,6 +325,8 @@ def main(argv: list[str] | None = None) -> int:
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     counts = {s: sum(1 for r in results if r["status"] == s) for s in ("downloaded", "cached", "error", "invalid")}
     print("Résultat :", counts, "| lignes totales :", f"{sum(r.get('rows', 0) for r in results):,}")
+    silver_paths = transform_archive(args.output, results)
+    print("Silver historique :", [str(path) for path in silver_paths])
     if args.upload:
         print("Fichiers publiés :", publish(args.output, results))
     return 1 if counts["error"] or counts["invalid"] else 0
