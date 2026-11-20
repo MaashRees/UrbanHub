@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import requests
 import yaml
 
@@ -225,8 +227,19 @@ def parse_timestamp(values: pd.Series) -> pd.Series:
     return pd.to_datetime(values, utc=True, errors="coerce")
 
 
+COLONNES_UTILES = ("timestamp", "datetime", "date", "time", "last_updated", "station_id", "station", "id", "uid",
+                   "free_bikes", "bikes_available", "bikes", "empty_slots", "free_slots", "free", "slots",
+                   "station_name", "name", "latitude", "lat", "longitude", "lon", "lng")
+ETAT = ["bikes_available", "free_slots"]
+STATIQUE = ["station_name", "latitude", "longitude"]
+# Une station sans aucun relevé depuis plus de 72 h est considérée hors service : on ne la remplit plus
+EXPIRATION = pd.Timedelta(hours=72)
+SILVER_COLONNES = ["city_id", "city_name", "network_id", "station_id", "station_name", "latitude", "longitude",
+                   "bikes_available", "free_slots", "observed_at_utc", "snapshot_minute_utc", "hour_utc"]
+
+
 def normalize_archive(frame: pd.DataFrame, network: str) -> pd.DataFrame:
-    """Mappe le schéma réel de l'archive vers le contrat Silver direct."""
+    """Mappe le schéma réel de l'archive (id, name, bikes, free, timestamp) vers le contrat Silver direct."""
     timestamp_column = find_column(frame, ("timestamp", "datetime", "date", "time", "last_updated"))
     station_column = find_column(frame, ("station_id", "station", "id", "uid"))
     bikes_column = find_column(frame, ("free_bikes", "bikes_available", "bikes"))
@@ -235,69 +248,100 @@ def normalize_archive(frame: pd.DataFrame, network: str) -> pd.DataFrame:
     latitude_column = find_column(frame, ("latitude", "lat"), required=False)
     longitude_column = find_column(frame, ("longitude", "lon", "lng"), required=False)
     data = pd.DataFrame({
-        "network_id": network,
         "station_id": frame[station_column].astype(str),
         "station_name": frame[name_column] if name_column else pd.NA,
-        "latitude": frame[latitude_column] if latitude_column else pd.NA,
-        "longitude": frame[longitude_column] if longitude_column else pd.NA,
+        "latitude": pd.to_numeric(frame[latitude_column], errors="coerce") if latitude_column else float("nan"),
+        "longitude": pd.to_numeric(frame[longitude_column], errors="coerce") if longitude_column else float("nan"),
         "bikes_available": pd.to_numeric(frame[bikes_column], errors="coerce"),
         "free_slots": pd.to_numeric(frame[slots_column], errors="coerce"),
         "observed_at_utc": parse_timestamp(frame[timestamp_column]),
     })
     data = data.dropna(subset=["station_id", "observed_at_utc"])
-    data["snapshot_minute_utc"] = data["observed_at_utc"].dt.floor("min").astype(str)
-    data["city_id"] = data["network_id"].map({"velib": "paris", "velov": "lyon", "vlille": "lille"}).fillna(data["network_id"])
-    data["city_name"] = data["city_id"].map({"paris": "Paris", "lyon": "Lyon", "lille": "Lille"})
-    return data.sort_values(["station_id", "observed_at_utc"]).drop_duplicates(
-        ["network_id", "station_id", "observed_at_utc"], keep="last"
-    )
+    # Des valeurs négatives existent dans la source (4 lignes pour Vélib' 2025) : erreur de donnée, écartée.
+    # Les grandes capacités (stations d'événements : festivals, hippodrome) sont réelles et conservées.
+    data = data[(data["bikes_available"].fillna(0) >= 0) & (data["free_slots"].fillna(0) >= 0)]
+    return data.sort_values(["station_id", "observed_at_utc"])
 
 
-def to_hourly(frame: pd.DataFrame) -> pd.DataFrame:
-    """Produit un état horaire par station via dernier état connu puis forward-fill."""
-    value_columns = ["station_name", "latitude", "longitude", "bikes_available", "free_slots"]
-    outputs = []
-    keys = ["city_id", "city_name", "network_id", "station_id"]
-    # L'archive n'écrit une ligne que lorsque l'état d'une station change : le forward-fill est donc exact
-    # tant que le collecteur tournait. Une heure sans aucun relevé sur tout le réseau est une panne de collecte :
-    # elle est écartée au lieu d'être remplie avec des valeurs inventées.
-    heures_observees = {reseau: set(g["observed_at_utc"].dt.floor("h").unique()) for reseau, g in frame.groupby("network_id")}
-    for key_values, station in frame.groupby(keys, dropna=False):
-        station = station.sort_values("observed_at_utc").set_index("observed_at_utc")
-        hourly = station[value_columns].resample("1h").last().ffill()
-        for key, value in zip(keys, key_values):
-            hourly[key] = value
-        hourly = hourly.reset_index().rename(columns={"observed_at_utc": "hour_utc"})
-        hourly = hourly[hourly["hour_utc"].isin(heures_observees[key_values[2]])].copy()
-        hourly["observed_at_utc"] = hourly["hour_utc"]
-        hourly["snapshot_minute_utc"] = hourly["hour_utc"].astype(str)
-        outputs.append(hourly)
-    if not outputs:
-        return pd.DataFrame()
-    columns = ["city_id", "city_name", "network_id", "station_id", "station_name", "latitude", "longitude",
-               "bikes_available", "free_slots", "observed_at_utc", "snapshot_minute_utc", "hour_utc"]
-    return pd.concat(outputs, ignore_index=True)[columns].sort_values(["city_id", "station_id", "hour_utc"])
+def hourly_month(frame: pd.DataFrame, network: str, carry: pd.DataFrame | None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """État horaire par station pour un mois : dernier état connu de l'heure, puis forward-fill.
+
+    L'archive n'écrit une ligne que lorsque l'état d'une station change : le forward-fill est exact tant que
+    le collecteur tournait. Les heures sans aucun relevé sur tout le réseau (panne de collecte) sont écartées,
+    et une station silencieuse depuis plus de EXPIRATION n'est plus remplie. `carry` porte le dernier état connu
+    du mois précédent ; la fonction renvoie aussi le `carry` à passer au mois suivant.
+    """
+    f = frame.assign(hour_utc=frame["observed_at_utc"].dt.floor("h")).sort_values("observed_at_utc")
+    last = f.drop_duplicates(["station_id", "hour_utc"], keep="last")
+    hours = pd.date_range(last["hour_utc"].min(), last["hour_utc"].max(), freq="h")
+    observed_hours = pd.DatetimeIndex(last["hour_utc"].unique())
+
+    if carry is None or carry.empty:
+        carry = pd.DataFrame({**{c: pd.Series(dtype="float64") for c in ETAT}, **{c: pd.Series(dtype="object") for c in STATIQUE},
+                              "last_obs": pd.Series(dtype=hours.dtype)}).rename_axis("station_id")
+    alive = carry[carry["last_obs"] + EXPIRATION >= hours[0]]
+    seed = alive.reset_index()[["station_id"] + ETAT].assign(hour_utc=hours[0])
+    obs = pd.concat([seed, last[["station_id", "hour_utc"] + ETAT]], ignore_index=True)
+    obs = obs.drop_duplicates(["station_id", "hour_utc"], keep="last")
+
+    grid_index = pd.MultiIndex.from_product([obs["station_id"].unique(), hours], names=["station_id", "hour_utc"])
+    grid = obs.set_index(["station_id", "hour_utc"])[ETAT].reindex(grid_index).groupby(level=0).ffill().dropna()
+    grid = grid[grid.index.get_level_values("hour_utc").isin(observed_hours)]
+
+    derniere_obs = last.groupby("station_id")["hour_utc"].max()
+    derniere_obs = pd.concat([alive["last_obs"], derniere_obs]).groupby(level=0).max()
+    limite = derniere_obs.reindex(grid.index.get_level_values("station_id")).to_numpy() + EXPIRATION
+    grid = grid[grid.index.get_level_values("hour_utc").to_numpy() <= limite]
+
+    statique = pd.concat([carry[STATIQUE], f.drop_duplicates("station_id", keep="last").set_index("station_id")[STATIQUE]])
+    statique = statique[~statique.index.duplicated(keep="last")]
+    out = grid.reset_index().merge(statique.reset_index(), on="station_id", how="left")
+    city_id = {"velib": "paris", "velov": "lyon", "vlille": "lille"}.get(network, network)
+    out["network_id"] = network
+    out["city_id"] = city_id
+    out["city_name"] = {"paris": "Paris", "lyon": "Lyon", "lille": "Lille"}.get(city_id, city_id)
+    out["observed_at_utc"] = out["hour_utc"]
+    out["snapshot_minute_utc"] = out["hour_utc"].astype(str)
+    out = out[SILVER_COLONNES].sort_values(["station_id", "hour_utc"])
+
+    dernier_etat = obs.sort_values("hour_utc").drop_duplicates("station_id", keep="last").set_index("station_id")[ETAT]
+    new_carry = dernier_etat.join(statique).join(derniere_obs.rename("last_obs"))
+    return out, new_carry
 
 
 def transform_archive(root: Path, results: list[dict[str, Any]]) -> list[Path]:
-    """Transforme les Parquet bruts valides en une Silver horaire par année."""
-    files = [local_path(root, item) for item in results if item["status"] in {"downloaded", "cached"}]
-    outputs = []
-    for year in sorted({int(path.parent.name) for path in files}):
-        frames = []
-        for path in files:
-            if int(path.parent.name) != year:
-                continue
-            network = path.name.split("-", 2)[1]
-            LOG.info("Lecture du schéma réel : %s", path)
-            frames.append(normalize_archive(pd.read_parquet(path), network))
-        hourly = to_hourly(pd.concat(frames, ignore_index=True))
-        destination = root / "silver" / f"year={year}" / "citybikes_stations_hourly.parquet"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        hourly.to_parquet(destination, index=False, engine="pyarrow", compression="snappy")
-        outputs.append(destination)
-        LOG.info("Silver historique %s : %d lignes", destination, len(hourly))
+    """Transforme les Parquet bruts valides en Silver horaire : un fichier par réseau et par année.
+
+    Les mois sont traités un par un (sans la colonne JSON `extra`) et écrits au fur et à mesure : la mémoire
+    reste bornée même pour Vélib'. Fichier : silver/year=AAAA/citybikes_stations_hourly_<réseau>.parquet
+    """
+    files = sorted((local_path(root, item) for item in results if item["status"] in {"downloaded", "cached"}),
+                   key=lambda p: (p.name.split("-", 2)[1], p.name))
+    outputs: list[Path] = []
+    for network in sorted({p.name.split("-", 2)[1] for p in files}):
+        carry = None
+        writers: dict[int, tuple[Any, Path]] = {}
+        try:
+            for path in (p for p in files if p.name.split("-", 2)[1] == network):
+                year = int(path.parent.name)
+                present = set(pq.read_schema(path).names)
+                LOG.info("Lecture : %s", path.name)
+                raw = pd.read_parquet(path, columns=[c for c in COLONNES_UTILES if c in present])
+                month, carry = hourly_month(normalize_archive(raw, network), network, carry)
+                del raw
+                table = pa.Table.from_pandas(month, preserve_index=False)
+                if year not in writers:
+                    destination = root / "silver" / f"year={year}" / f"citybikes_stations_hourly_{network}.parquet"
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    writers[year] = (pq.ParquetWriter(destination, table.schema, compression="snappy"), destination)
+                    outputs.append(destination)
+                writers[year][0].write_table(table.cast(writers[year][0].schema))
+                LOG.info("  %s : %d lignes horaires", path.name, len(month))
+        finally:
+            for writer, _ in writers.values():
+                writer.close()
     return outputs
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
