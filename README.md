@@ -75,6 +75,9 @@ UrbanHub/
 ├── scripts/                               # Collecte et outils
 │   ├── openmeteo_batch.py                 # Batch météo Open-Meteo (Paris, Lyon, Lille)
 │   ├── citybikes_stream.py                # Micro-batch CityBikes (toutes les 5 min)
+│   ├── citybikes_archive.py               # Archives mensuelles CityBikes (data.citybik.es), 5 ans
+│   ├── openaq_archive.py                  # Archive publique OpenAQ (S3), 2022 à 2026, conversion Silver
+│   ├── openmeteo_archive.py               # Météo 2022 à 2026 avec visibilité (ERA5 + historical-forecast)
 │   ├── noaa_batch.py                      # Ancien batch NOAA, conservé comme historique
 │   └── init_datalake.py                   # Création et test des buckets
 ├── src/
@@ -85,7 +88,8 @@ UrbanHub/
 │   ├── 02_citybikes_stream.ipynb          # Pilotage de la collecte CityBikes
 │   ├── 03_openaq_iot.ipynb                # Pollution OpenAQ et table croisée city_hourly
 │   ├── 04_analyses_mobilite.ipynb         # Analyses de mobilité et croisement vélos, météo, pollution
-│   └── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
+│   ├── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
+│   └── 06_archives_citybikes.ipynb        # Archives CityBikes sur 5 ans (plan, téléchargement, schéma)
 ├── demos/                                 # Vidéos finales (non versionnées)
 │   ├── Démo-UrbanHub-Partie1.mp4          # Batch météo, Data Lake et vue météo
 │   └── Démo-UrbanHub-Partie2.mp4          # Streaming, IoT, croisements et Dashboard

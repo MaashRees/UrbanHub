@@ -31,6 +31,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Relecture et vérification du Gold : jointure `(city_id, hour_utc)` en UTC, pluie alignée sur le début de chaque heure et visibilité laissée manquante quand absente de l’API. Au 19/11/2026, 181 050 heures-ville, 6 clés communes avec le Gold mobilité et 923 avec le Gold pollution ; aucune clé commune aux trois à cet instant.
 - [x] [Notebook d’analyse Open-Meteo](../notebooks/01_openmeteo_batch.ipynb) : couverture, saisonnalité, extrêmes et visibilité.
 - [ ] Planifier l’actualisation météo et rejouer le calcul de la table croisée lorsque les collectes mobilité et pollution se recouvrent.
+- [x] [Script Open-Meteo 2022 à 2026 avec visibilité](../scripts/openmeteo_archive.py) : ERA5 pour les mesures, `historical-forecast` pour la visibilité, 30 requêtes en parallèle, table `weather_hourly_visibility.parquet` au même contrat que le Gold, **sans toucher au Gold partagé**. Vérifié avec 2 requêtes réelles d'un jour (visibilité 24 valeurs sur 24) ; non lancé en entier. À Rémi de décider de la publication
 
 #### Archive NOAA ISD - lot France 2020–2024
 - [x] Récupération et prise de connaissance du cahier des charges
@@ -49,6 +50,8 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] [Notebook de pilotage](../notebooks/02_citybikes_stream.ipynb) (PR #10) ; il est livré sans sorties enregistrées
 - [x] **Bronze**, **Silver** et **Gold** publiés dans R2 : 2 248 stations, 6 relevés, `mobility_station_latest` et `mobility_hourly`
 - [ ] Collecte **continue** sur plusieurs jours : au 19/11/2026, 2 cycles seulement (11:09 et 11:39 UTC). Sans elle, ni pics journaliers ni déséquilibres géographiques ne sont démontrables
+- [x] [Script](../scripts/citybikes_archive.py) et [notebook 06](../notebooks/06_archives_citybikes.ipynb) pour télécharger les **archives officielles CityBikes** (data.citybik.es, ODbL, un Parquet par réseau et par mois) sur 5 ans, 2022 à 2026 : plan, reprise, vérification de taille et de lecture Parquet, publication optionnelle dans Bronze. Plan réel : **61 fichiers, 946 Mo**, car l'archive commence en novembre 2024 (2022 et 2023 absents, mois manquants signalés). Testé sur un serveur factice ; **aucun fichier téléchargé à ce jour**
+- [ ] Télécharger les archives, lire leur schéma, les transformer en séries horaires (même forme que le Silver en direct) puis relancer le notebook 04 sur cet historique
 - [x] Gold calculé depuis le Silver **publié** quand on est en ligne (R2/MinIO), et tout en local avec `--storage local` : le Silver local d'une machine n'entre plus jamais dans le Gold partagé. Seules les deux dernières heures sont relues puis fusionnées avec le Gold publié
 - [x] Gold publié reconstruit le 19/11/2026 avec `--rebuild-gold` : 3 lignes horaires et 2 247 stations, compteurs identiques à ceux du Silver publié (l'ancien Gold, qui avait 6 lignes dont 3 heures sans Silver en ligne, est sauvegardé en local)
 - [ ] Relancer le notebook 03 pour que `kpis/mobility_*` (copie harmonisée) et `city_hourly` suivent le nouveau Gold mobilité
@@ -64,6 +67,8 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] **Gold** `pollution_hourly` (3 732 heures, du 05/11 au 19/11/2026 12:00 UTC), classement des zones, profil journalier, dominance rapportée aux seuils OMS, 292 anomalies au-dessus du 95e percentile
 - [x] Service `collector-openaq` : pipeline relancé toutes les 2 h avec une fenêtre de 12 h (`OPENAQ_LOOKBACK_HOURS`), filtre des capteurs actifs sur 30 jours au lieu de l'année 2026 écrite en dur
 - [ ] Retenir plus de 2 capteurs par polluant et par ville (28 sur 149) et rendre le Silver incrémental (il relit tout le Bronze à chaque exécution)
+- [x] [Script d'archive OpenAQ](../scripts/openaq_archive.py) : liste l'archive publique S3 (`openaq-data-archive`, un `csv.gz` par jour et par emplacement), télécharge avec reprise et contrôle, convertit en Silver (mêmes colonnes et règles que le pipeline en direct, ppb et ppm convertis en µg/m³). Plan réel testé : 2 emplacements sur 2022 à 2026 = 3 028 fichiers, 2 Mo. Testé sur serveur factice ; **rien de réel téléchargé**. À régler après comparaison avec l'API : le décalage d'horodatage (`--shift-hours`)
+- [ ] Télécharger l'archive OpenAQ, produire `kpis/pollution_monthly.parquet` (colonnes `city_id`, `month`, `pollutant`, `value_mean`) : le dashboard l'affichera dans l'onglet Historique
 
 ### <img src="assets/icons/diamond.svg" width="18" height="18" alt=""> Partie 4 - Croisement Analytique Multi-sources
 - [x] Clé de jointure commune : `(city_id, hour_utc)` (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#36-calcul-des-indicateurs-gold--jointure-multi-sources))
@@ -79,6 +84,7 @@ Ce document recense l'état d'avancement des différentes composantes de la plat
 - [x] Correctif de l'onglet « Jumeau & Croisement » (`TypeError` sur une colonne entière)
 - [x] Icônes SVG à la place des emojis dans les documents, les notebooks et les scripts
 - [x] Dashboard : tableau de fraîcheur par source (à jour ou en retard), rafraîchissement automatique de la page toutes les 5 minutes avec la ville conservée, adresse du lac masquée
+- [x] Dashboard : onglet **Historique** (température et pluie par mois sur 2020 à 2026, part des jours avec visibilité, historique de pollution quand `kpis/pollution_monthly.parquet` existe, couverture par source, état des trois archives dans le Data Lake) ; Voilà n'affiche plus de trace d'erreur
 - [x] Changement de source météo validé avec l'enseignant
 - [ ] Configuration de l'utilisateur IAM restreint en lecture seule sur Gold (cf. [policy_gold.json](../../policy_gold.json)) ; aujourd'hui Jupyter n'a pas de mot de passe et les conteneurs montent le `.env` avec les clés d'écriture
 - [ ] Génération d'URLs pré-signées pour le partage de synthèses (cf. [GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#37-partage-sécurisé-par-urls-pré-signées))

@@ -48,7 +48,11 @@ services:
       - .:/app
     depends_on:
       - minio
-    command: voila notebooks/05_dashboard.ipynb --port=8866 --no-browser --Voila.ip=0.0.0.0
+    # Chaque page ouverte démarre un noyau Python (environ 400 Mo). Sans limite, les noyaux des pages
+    # fermées ou rechargées s'accumulent et saturent Docker : on les arrête après 10 minutes d'inactivité
+    # et on plafonne la mémoire du service.
+    mem_limit: 2g
+    command: voila notebooks/05_dashboard.ipynb --port=8866 --no-browser --Voila.ip=0.0.0.0 --MappingKernelManager.cull_idle_timeout=600 --MappingKernelManager.cull_interval=60 --MappingKernelManager.cull_connected=True --VoilaConfiguration.show_tracebacks=False
     restart: unless-stopped
 
   # ==========================================================================
