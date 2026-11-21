@@ -1,98 +1,59 @@
-# <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Reste à faire, répartition et budget de stockage
+# <img src="assets/icons/clipboard.svg" width="18" height="18" alt=""> Reste à faire et budget de stockage
 
-État au 20/11/2026. Ce document liste ce qui manque, qui le fait, et ce qu'il faut relancer. Les messages prêts à envoyer sont en fin de document.
+État au 20/11/2026 en fin d'après-midi. Les trois parties du sujet sont réalisées sur les données et dans le Data Lake. Il reste l'enregistrement des vidéos et quelques finitions.
+
+## <img src="assets/icons/check-circle.svg" width="18" height="18" alt=""> Ce qui est terminé
+
+| Partie | Réalisé |
+| :--- | :--- |
+| Partie 1, météo | Open-Meteo sur 2020 à 2026, archive 2022 à 2026 avec visibilité, Bronze, Silver et Gold publiés, bilan de référence ([RESULTATS_NOAA.md](RESULTATS_NOAA.md)), notebooks 01 et 07 exécutés |
+| Partie 2, mobilité | Collecte toutes les 5 minutes en continu, archive officielle CityBikes de novembre 2024 à septembre 2026 transformée en séries horaires (28,4 millions de lignes) et publiée, notebooks 02, 04 et 06 |
+| Partie 3, pollution | Pipeline OpenAQ incrémental, archive 2022 à 2026 validée contre l'API (608 heures communes, écart nul), conclusions rédigées ([CONCLUSIONS_POLLUTION.md](CONCLUSIONS_POLLUTION.md)) |
+| Partie 4, croisement | Table `city_hourly`, historique 5 ans, mobilité contre météo dans le dashboard et le notebook 04 |
+| Restitution | Dashboard Voilà à 6 onglets (météo, mobilité, qualité de l'air, croisement, historique, analyses 5 ans) |
 
 ## <img src="assets/icons/hard-drive.svg" width="18" height="18" alt=""> Budget de stockage (quota R2 : 10 Go)
 
-Volumes mesurés le 20/11/2026 (octets exacts), sauf mention « estimation ».
+Mesuré le 20/11/2026 : **0,38 Go utilisés sur 10 (3,8 %)**.
 
-| Élément | Volume | Dans R2 aujourd'hui ? |
+| Couche | Volume | Contenu principal |
 | :--- | ---: | :--- |
-| État du lac après publication des archives (Bronze 115 Mo, Silver 87 Mo, Gold 13 Mo) | **0,215 Go** | oui |
-| Open-Meteo 2022-2026 (Bronze 14,5 Mo, Silver 1,4 Mo, table horaire 1,4 Mo) | 17 Mo | oui, publié |
-| OpenAQ 2022-2026 : Bronze (21 053 fichiers) | 12 Mo | oui, publié |
-| OpenAQ : Silver (4,1 Mo) et Gold historiques (tables `kpis/history/` et `pollution_monthly`) | environ 10 Mo | oui, publié |
-| **Sous-total Open-Meteo et OpenAQ, toutes couches** | **environ 40 Mo** | oui, publié |
-| Archive CityBikes 2022-2026, Bronze (61 fichiers) | 946 Mo | non |
-| Archive CityBikes 2025 seul, Bronze (36 fichiers) | 640 Mo | non |
-| Séries horaires par station tirées de l'archive CityBikes (estimation) | 150 à 300 Mo pour 2025 | non |
-| Collecte CityBikes en direct, Bronze JSON brut | **294 Mo par jour** | oui, en continu |
-| Collecte CityBikes en direct, Silver | 59 Mo par jour | oui, en continu |
+| Bronze | 197 Mo | collecte CityBikes 75 Mo, OpenAQ 75 Mo, archives Open-Meteo et OpenAQ 27 Mo, `sample/` 12 Mo |
+| Silver | 168 Mo | archive CityBikes 69 Mo, ancien NOAA 78 Mo, collecte CityBikes 15 Mo, archives OpenAQ et Open-Meteo 6 Mo |
+| Gold | 14 Mo | tables `kpis/`, historique `kpis/history/` |
 
-**Lecture :** les archives OpenAQ et Open-Meteo sont négligeables. Le vrai risque est la **collecte en direct** : environ 350 Mo par jour, donc 10 Go atteints en 4 semaines et 5 Go en 2 semaines.
+La collecte CityBikes en direct ajoute environ 95 Mo par jour dans R2 (Bronze et Silver, mesuré sur 23 heures). Elle est arrêtée après les vidéos : les données déjà collectées restent.
 
-| Scénario | Total R2 |
-| :--- | ---: |
-| Avant les archives | 0,17 Go |
-| + archives OpenAQ et Open-Meteo (déjà publiées) | 0,215 Go |
-| + archive CityBikes 2025 (Bronze et séries horaires, estimation) | environ 1,2 Go |
-| + 14 jours de collecte en direct brute | environ 6,1 Go |
-| + 28 jours de collecte brute | environ 11 Go : **dépasse le quota** |
+**Nettoyage possible, sur décision de l'équipe :** l'ancien NOAA (`silver/weather/`, 78 Mo) et les préfixes `sample/` (12 Mo environ) ne servent plus. Le Bronze brut de l'archive CityBikes (environ 950 Mo) n'est pas dans R2 et se retélécharge depuis la source publique.
 
-**Mesures pour rester sous 10 Go :**
-1. **Arrêter la collecte en direct après les vidéos** (décidé). Les données déjà collectées restent dans R2.
-2. Pour l'archive CityBikes, ne garder dans R2 que ce qui sert : 2025 seul, et conserver le Bronze brut en local (il se retélécharge depuis la source publique).
-3. Supprimer l'ancien NOAA (`silver/weather/` 78 Mo) et les préfixes `sample/` (12 Mo) quand tout est validé.
+## <img src="assets/icons/list.svg" width="18" height="18" alt=""> Ce qui reste
 
-## <img src="assets/icons/rocket.svg" width="18" height="18" alt=""> À relancer (commandes)
+| Priorité | Tâche | Qui |
+| :--- | :--- | :--- |
+| 1 | Enregistrer les deux vidéos de démonstration (`demos/Démo-UrbanHub-Partie1.mp4` et `Partie2.mp4`) | Seer, avec Rémi pour la partie 1 et Conambot et Julie pour la partie 2 |
+| 2 | Arrêter la collecte en direct après les vidéos : `docker compose --profile collect stop` | Seer |
+| 3 | Relire les conclusions pollution ([CONCLUSIONS_POLLUTION.md](CONCLUSIONS_POLLUTION.md)), brouillon à ajuster ; vérifier les heures du profil journalier sur le graphique | Julie |
+| 4 | Utilisateur IAM en lecture seule sur le Gold pour le dashboard (aujourd'hui les conteneurs montent le `.env` avec les clés d'écriture) | Seer |
+| 5 | Nettoyer R2 (`sample/`, ancien NOAA) après accord de l'équipe | Seer |
+| 6 | Si le temps le permet : URLs pré-signées pour partager des synthèses ([GUIDE_TECHNIQUE.md](GUIDE_TECHNIQUE.md#37-partage-sécurisé-par-urls-pré-signées)) | Seer |
+| 7 | Retenir plus de 2 capteurs par polluant et par ville dans l'ingestion OpenAQ | Julie |
+
+## <img src="assets/icons/rocket.svg" width="18" height="18" alt=""> Commandes utiles
 
 | Quand | Commande | Pourquoi |
 | :--- | :--- | :--- |
-| Dès que le téléchargement OpenAQ est fini | `python scripts/archives_to_gold.py` | produit les séries horaires et les tables Gold historiques |
-| Ensuite | exécuter `notebooks/07_analyses_historiques.ipynb` | analyses sur 5 ans |
-| Déjà fait le 20/11/2026 | `openmeteo_archive.py --upload`, `openaq_archive.py --silver --upload`, `archives_to_gold.py --upload` | publié et vérifié dans R2 (buckets existants, aucun créé). Ne pas relancer |
-| Après la fusion de la branche | `docker compose --profile collect up -d --build` | les collecteurs prennent le nouveau code |
-| Quand CityBikes a été transformé | notebooks 04 et 06, puis 07 | analyses de mobilité sur l'historique |
+| Après la fusion de la branche | `git pull --rebase` puis `uv sync` | récupérer le code et l'environnement |
+| Pour voir le dashboard | `docker compose up -d dashboard` puis [http://localhost:8866](http://localhost:8866) | restitution Voilà |
 | Après chaque nouvelle collecte | notebook 03 | reconstruit `city_hourly` |
+| Après les vidéos | `docker compose --profile collect stop` | arrête la collecte et la croissance du stockage |
 
-## <img src="assets/icons/wrench.svg" width="18" height="18" alt=""> Code à créer, par personne
-
-| Qui | Tâche | Taille |
-| :--- | :--- | :--- |
-| **Conambot** | Transformer l'archive CityBikes en séries horaires par ville (et par station pour 2025) au même format que le Silver en direct, après lecture du schéma réel (notebook 06) | moyenne |
-| **Conambot** | Étendre le notebook 04 avec l'historique (pics journaliers, stations critiques sur un an) | moyenne |
-| **Julie** | Retenir plus de capteurs par polluant (`max_sensors_per_pollutant`) et valider l'archive OpenAQ contre l'API sur 2 ou 3 jours | petite |
-| **Julie** | Rendre le Silver OpenAQ incrémental (il relit tout le Bronze à chaque exécution) | moyenne |
-| **Julie** | Relire l'interprétation pollution du notebook 07 et rédiger les conclusions | petite |
-| **Rémi** | Décider quoi publier de la météo avec visibilité (`weather_hourly_visibility`) et l'intégrer au Gold si accepté ; Lille n'a de visibilité que depuis le 26/06/2024 | petite |
-| **Seer** | Nettoyer R2 (`sample/`, ancien NOAA), créer l'utilisateur en lecture seule pour le dashboard | petite |
-| **Seer** | Dashboard : onglet mobilité historique une fois les tables publiées | petite |
-| **Seer** | README final, guide, coordination des vidéos | petite |
-
-## <img src="assets/icons/list.svg" width="18" height="18" alt=""> Décisions à prendre
-
-1. **Décidé : la collecte en direct est coupée après l'enregistrement des vidéos** (`docker compose --profile collect stop`). Reste à fixer la machine, une seule, qui la fait tourner d'ici là, et à désactiver la mise en veille du PC.
-2. Télécharger l'archive CityBikes en entier (946 Mo) ou 2025 seul (640 Mo).
-3. Publier dans R2 le Bronze de l'archive CityBikes, ou le garder en local.
+**Ne pas relancer** : les téléchargements d'archives (Open-Meteo, OpenAQ, CityBikes) et leur publication. Ils sont faits et publiés dans R2 ; relancer ne ferait que les retélécharger.
 
 ## <img src="assets/icons/video.svg" width="18" height="18" alt=""> Vidéos
 
-- **Partie 1** (météo) : prête à enregistrer avec Open-Meteo, 5 ans et visibilité.
-- **Partie 2** (streaming, pollution, croisement) : à enregistrer après la publication des tables historiques, pour montrer le dashboard avec l'onglet Historique rempli.
+- **Partie 1** (météo) : batch Open-Meteo, Data Lake et vue météo du dashboard.
+- **Partie 2** (streaming, pollution, croisement) : collecte CityBikes, pollution OpenAQ, croisements et dashboard avec les onglets Historique et Analyses 5 ans.
 
-## <img src="assets/icons/info.svg" width="18" height="18" alt=""> Messages à envoyer
+## <img src="assets/icons/info.svg" width="18" height="18" alt=""> Message à l'équipe (à envoyer quand tout est fusionné)
 
-**À tout le monde**
-
-> Salut, point d'étape. Les archives sur 5 ans (2022 à 2026) sont écrites : météo avec visibilité, pollution OpenAQ, et le plan CityBikes. Les tables historiques sont déjà dans R2 : ne retéléchargez pas les archives, faites `git pull --rebase` puis `uv sync`. Stockage R2 : 0,215 Go sur 10 ; la collecte CityBikes en direct ajoute environ 350 Mo par jour, on l'arrête après les vidéos. Voici la répartition pour après les vidéos, chacun sur sa branche, jamais sur `main`. Détail dans `docs/RESTE_A_FAIRE.md`.
-
-**À Conambot**
-
-> 1) Peux-tu transformer l'archive CityBikes en séries horaires par ville (et par station pour 2025) dans le même format que le Silver en direct ? Pour lire le schéma sans tout télécharger : `python scripts/citybikes_archive.py --years 2025 --networks vlille` (40 Mo, un seul réseau). Une seule personne télécharge l'archive complète.
-> 2) Étends le notebook 04 avec l'historique.
-> 3) La collecte en direct sera coupée après les vidéos. Qui la fait tourner d'ici là ? Une seule machine, sans mise en veille.
-
-**À Julie**
-
-> 1) Peux-tu retenir plus de capteurs par polluant et comparer l'archive OpenAQ à l'API sur 2 ou 3 jours ? J'ai trouvé que l'archive donne la fin de la période, donc un décalage de -1 h par rapport à notre Silver.
-> 2) Rends le Silver incrémental (il relit tout le Bronze).
-> 3) Relis l'interprétation pollution du notebook 07 et rédige les conclusions.
-
-**À Rémi**
-
-> 1) La visibilité : Paris et Lyon l'ont depuis 2022 avec l'API `historical-forecast`, Lille seulement depuis le 26/06/2024. Veux-tu publier cette table dans le Gold ?
-> 2) Le [bilan météo Open-Meteo 2022–2026](RESULTATS_NOAA.md) est rédigé à partir du notebook 07.
-
-**À Seer (moi)**
-
-> Je publie dans R2 après vérification, je nettoie `sample/` et l'ancien NOAA, je crée l'utilisateur en lecture seule du dashboard, j'ajoute l'onglet mobilité historique, et je coordonne les vidéos.
+> Salut, tout est fusionné sur `main` : archives sur 5 ans, historique CityBikes, dashboard à 6 onglets, conclusions pollution et bilan météo. Faites `git pull --rebase` puis `uv sync`, et ne retéléchargez pas les archives : elles sont déjà dans R2. Il reste à enregistrer les deux vidéos de démonstration. Julie, peux-tu relire `docs/CONCLUSIONS_POLLUTION.md` avant ? On arrête la collecte en direct juste après les vidéos.

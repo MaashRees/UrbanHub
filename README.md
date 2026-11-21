@@ -70,6 +70,7 @@ UrbanHub/
 │   ├── MIGRATION_OPENMETEO.md             # Passage de la météo NOAA à Open-Meteo
 │   ├── RESULTATS_NOAA.md                  # Bilan de référence Open-Meteo 2022–2026
 │   ├── ARCHIVE_RESULTATS_NOAA.md          # Bilan historique NOAA 2020–2024
+│   ├── CONCLUSIONS_POLLUTION.md           # Conclusions pollution et croisement météo (5 ans)
 │   └── assets/icons/                      # Icônes SVG utilisées dans les documents
 ├── config/
 │   └── cities.yml                         # Référentiel des villes et métadonnées
@@ -79,6 +80,8 @@ UrbanHub/
 │   ├── citybikes_archive.py               # Archives mensuelles CityBikes (data.citybik.es), 5 ans
 │   ├── openaq_archive.py                  # Archive publique OpenAQ (S3), 2022 à 2026, conversion Silver
 │   ├── openmeteo_archive.py               # Météo 2022 à 2026 avec visibilité (ERA5 + historical-forecast)
+│   ├── archives_to_gold.py                # Tables Gold historiques (météo, pollution, city_hourly_history)
+│   ├── citybikes_archive_gold.py          # Gold mobilité historique (remplissage, usage) depuis l'archive CityBikes
 │   ├── noaa_batch.py                      # Ancien batch NOAA, conservé comme historique
 │   └── init_datalake.py                   # Création et test des buckets
 ├── src/
@@ -90,7 +93,8 @@ UrbanHub/
 │   ├── 03_openaq_iot.ipynb                # Pollution OpenAQ et table croisée city_hourly
 │   ├── 04_analyses_mobilite.ipynb         # Analyses de mobilité et croisement vélos, météo, pollution
 │   ├── 05_dashboard.ipynb                 # Tableau de bord interactif Voilà
-│   └── 06_archives_citybikes.ipynb        # Archives CityBikes sur 5 ans (plan, téléchargement, schéma)
+│   ├── 06_archives_citybikes.ipynb        # Archives CityBikes sur 5 ans (plan, téléchargement, schéma)
+│   └── 07_analyses_historiques.ipynb      # Analyses sur 5 ans : météo, pollution et leur croisement
 ├── demos/                                 # Vidéos finales (non versionnées)
 │   ├── Démo-UrbanHub-Partie1.mp4          # Batch météo, Data Lake et vue météo
 │   └── Démo-UrbanHub-Partie2.mp4          # Streaming, IoT, croisements et Dashboard
@@ -213,6 +217,7 @@ uv run jupyter notebook
 - <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> [Cahier des charges complet (ENONCE.md)](docs/ENONCE.md)
 - <img src="docs/assets/icons/map.svg" width="18" height="18" alt=""> [Feuille de route & Plan d'architecture (PLAN.md)](docs/PLAN.md)
 - <img src="docs/assets/icons/bar-chart.svg" width="18" height="18" alt=""> [Tableau de bord de l'avancement (AVANCEMENT.md)](docs/AVANCEMENT.md)
+- <img src="docs/assets/icons/wind.svg" width="18" height="18" alt=""> [Conclusions pollution et croisement météo (CONCLUSIONS_POLLUTION.md)](docs/CONCLUSIONS_POLLUTION.md)
 - <img src="docs/assets/icons/book-open.svg" width="18" height="18" alt=""> [Guide Technique & Recettes d'Architecture (GUIDE_TECHNIQUE.md)](docs/GUIDE_TECHNIQUE.md)
 - <img src="docs/assets/icons/cloud.svg" width="18" height="18" alt=""> [Guide Data Lake Cloud & Bascule R2 (DATALAKE_CLOUD_GUIDE.md)](docs/DATALAKE_CLOUD_GUIDE.md)
 - <img src="docs/assets/icons/thermometer.svg" width="18" height="18" alt=""> [Migration météo NOAA vers Open-Meteo (MIGRATION_OPENMETEO.md)](docs/MIGRATION_OPENMETEO.md)
